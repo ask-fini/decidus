@@ -79,22 +79,22 @@ test("scope paths", () => {
 
 test("a company gets its own version; its bots inherit it; everyone else stays on global", async () => {
   await route("hello, first sight");
-  await until(() => api("/api/policies/route_conversation").catch(() => null));
+  await until(() => api("/api/policies/route_conversation.team").catch(() => null));
 
   // global v1, written by hand
-  await api("/api/policies/route_conversation/edit", { text: { billing: "charges", technical: "crash", shipping: "parcel" } });
-  assert.equal((await api("/api/policies/route_conversation/accept", {})).live, 1);
+  await api("/api/policies/route_conversation.team/edit", { text: { billing: "charges", technical: "crash", shipping: "parcel" } });
+  assert.equal((await api("/api/policies/route_conversation.team/accept", {})).live, 1);
 
   // acme edits on top of what it runs (global v1) and accepts: v2 belongs to acme
-  const s = await api("/api/policies/route_conversation/edit", { scope: "acme", text: { shipping: "parcel; damaged items" } });
+  const s = await api("/api/policies/route_conversation.team/edit", { scope: "acme", text: { shipping: "parcel; damaged items" } });
   assert.equal(s.base, 1);
   assert.equal(s.text.billing, "charges", "untouched options carry over");
   assert.match(s.tune.at(-1).note, /Edited shipping by hand/);
-  assert.equal((await api("/api/policies/route_conversation/accept", { scope: "acme" })).live, 2);
+  assert.equal((await api("/api/policies/route_conversation.team/accept", { scope: "acme" })).live, 2);
 
   const live = await api("/v1/policies");
-  assert.equal(live.policies.route_conversation.version, 1);
-  assert.equal(live.scopes.acme.route_conversation.version, 2);
+  assert.equal(live.policies["route_conversation.team"].version, 1);
+  assert.equal(live.scopes.acme["route_conversation.team"].version, 2);
 
   await route("warm-up"); await sleep(80);
   const acme = await decidus.trace({ scope: "acme/support-bot", conversationId: "conv_a1" }, () => route("the box arrived damaged"));
@@ -104,36 +104,36 @@ test("a company gets its own version; its bots inherit it; everyone else stays o
   assert.equal(teamOf(zeta), "billing", "zeta runs global v1, which knows nothing about damage");
   assert.doesNotMatch(lastSent(), /damaged/);
 
-  const calls = await until(async () => { const d = await api("/api/policies/route_conversation/calls?scope=acme"); return d.calls.length === 1 && d; });
+  const calls = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls?scope=acme"); return d.calls.length === 1 && d; });
   assert.equal(calls.calls[0].scope, "acme/support-bot");
   assert.equal(calls.calls[0].version, 2);
   assert.equal(calls.calls[0].conversation_id, "conv_a1");
 
-  const bot = await api("/api/policies/route_conversation?scope=acme/support-bot");
+  const bot = await api("/api/policies/route_conversation.team?scope=acme/support-bot");
   assert.deepEqual(bot.effective, { n: 2, from: "acme" });
   assert.deepEqual(bot.versions.map(v => [v.n, v.scope]), [[0, ""], [1, ""], [2, "acme"]]);
-  assert.deepEqual((await api("/api/policies/route_conversation")).versions.map(v => v.n), [0, 1], "global shows only its own line");
-  assert.deepEqual((await api("/api/policies/route_conversation")).scopes, ["acme", "acme/support-bot", "zeta", "zeta/web"]);
+  assert.deepEqual((await api("/api/policies/route_conversation.team")).versions.map(v => v.n), [0, 1], "global shows only its own line");
+  assert.deepEqual((await api("/api/policies/route_conversation.team")).scopes, ["acme", "acme/support-bot", "zeta", "zeta/web"]);
 
   // v2 is acme's; zeta can't run it. acme can go back to inheriting.
-  await assert.rejects(api("/api/policies/route_conversation/live", { scope: "zeta", version: 2 }), /belongs to acme/);
-  await api("/api/policies/route_conversation/live", { scope: "acme", version: null });
-  assert.deepEqual((await api("/api/policies/route_conversation?scope=acme")).effective, { n: 1, from: "" });
+  await assert.rejects(api("/api/policies/route_conversation.team/live", { scope: "zeta", version: 2 }), /belongs to acme/);
+  await api("/api/policies/route_conversation.team/live", { scope: "acme", version: null });
+  assert.deepEqual((await api("/api/policies/route_conversation.team?scope=acme")).effective, { n: 1, from: "" });
   assert.equal((await api("/v1/policies")).scopes.acme, undefined);
-  await api("/api/policies/route_conversation/live", { scope: "acme", version: 2 });
+  await api("/api/policies/route_conversation.team/live", { scope: "acme", version: 2 });
 });
 
 test("a scope's suggestion only learns from that scope; OpenAI writes it by default", async () => {
   await decidus.trace({ scope: "acme/support-bot" }, () => route("my charge is wrong"));
   await decidus.trace({ scope: "zeta/web" }, () => route("my parcel is late"));
-  const calls = await until(async () => { const d = await api("/api/policies/route_conversation/calls?q=decided:no"); return d.calls.length >= 6 && d; });
+  const calls = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls?q=decided:no"); return d.calls.length >= 6 && d; });
   const acmeCase = calls.calls.find(c => c.scope === "acme/support-bot" && c.headline.includes("charge"));
   const zetaCase = calls.calls.find(c => c.scope === "zeta/web" && c.headline.includes("parcel"));
   await api(`/api/cases/${acmeCase.id}/decide`, { value: "billing" });
   await api(`/api/cases/${zetaCase.id}/decide`, { value: "shipping" });
 
-  await assert.rejects(api("/api/policies/route_conversation/suggest", { scope: "acme", cases: [zetaCase.id] }), /pick at least one/);
-  const s = await api("/api/policies/route_conversation/suggest", { scope: "acme", all: true });
+  await assert.rejects(api("/api/policies/route_conversation.team/suggest", { scope: "acme", cases: [zetaCase.id] }), /pick at least one/);
+  const s = await api("/api/policies/route_conversation.team/suggest", { scope: "acme", all: true });
   assert.deepEqual(s.added, [acmeCase.id]);
   assert.equal(s.base, 2);
   assert.equal(s.notes, "openai wrote this");
@@ -143,20 +143,20 @@ test("a scope's suggestion only learns from that scope; OpenAI writes it by defa
   assert.deepEqual(w.body.tool_choice, { type: "function", function: { name: "write_policy" } });
   assert.match(w.body.messages[1].content, /my charge is wrong/);
   assert.doesNotMatch(w.body.messages[1].content, /my parcel is late/);
-  await api("/api/policies/route_conversation/discard", { scope: "acme" });
+  await api("/api/policies/route_conversation.team/discard", { scope: "acme" });
 });
 
 test("Gemini writes suggestions too, and writer() reads provider/model", async () => {
   Object.assign(process.env, { DECIDUS_SUGGEST_MODEL: "gemini/gemini-3.8-flash", GEMINI_API_KEY: "g-key", GEMINI_BASE_URL: mock });
   try {
-    const s = await api("/api/policies/route_conversation/suggest", { scope: "zeta", all: true });
+    const s = await api("/api/policies/route_conversation.team/suggest", { scope: "zeta", all: true });
     assert.equal(s.notes, "gemini wrote this");
     const g = seen.filter(x => x.path.includes(":generateContent")).at(-1);
     assert.equal(g.path, "/v1beta/models/gemini-3.8-flash:generateContent");
     assert.equal(g.headers["x-goog-api-key"], "g-key");
     assert.deepEqual(g.body.toolConfig, { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["write_policy"] } });
     assert.ok(g.body.tools[0].functionDeclarations[0].parametersJsonSchema.properties.options);
-    await api("/api/policies/route_conversation/discard", { scope: "zeta" });
+    await api("/api/policies/route_conversation.team/discard", { scope: "zeta" });
   } finally {
     process.env.DECIDUS_SUGGEST_MODEL = "";
   }

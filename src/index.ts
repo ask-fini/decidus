@@ -6,15 +6,28 @@
  *   new GoogleGenAI({ apiKey, httpOptions: { fetch: decidus.fetch() } })
  *   new TypeSafeClient({ fetch: decidus.fetch() })
  *
- * On a decision call it writes the live policy text into the request, sends it on unchanged
- * otherwise, and copies request + response to Decidus in the background. Everything else passes
- * straight through. Decidus never blocks a call and never changes the answer; if it is unreachable,
+ * A decision call is a structured output, or a function call forced to one tool, whose schema has a
+ * fixed-choice field (enum, const alternatives, boolean, or an array of those); or an OpenAI
+ * Decisions or Jev call. It writes the live policy text into the request, sends it on unchanged
+ * otherwise, and copies request + response to decidus in the background. Everything else passes
+ * straight through. decidus never blocks a call and never changes the answer; if it is unreachable,
  * calls go out exactly as your code wrote them.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { apply, normScope, resolve, routeOf, specs, type LiveSet } from "./shapes.js";
+import { apply, normScope, resolve, routeOf, specs, type Kind, type LiveSet, type Rename, type Route } from "./shapes.js";
 
 export type { LivePolicy, LiveSet, PolicyText, Spec, Route, Kind, Answer } from "./shapes.js";
+
+/** A decision decidus found in a request, as the `name` option sees it. */
+export interface Decision {
+  /** decidus's own name: schema or tool name + field path (`select_tags.chosen_tags.Intent`), or the question name. */
+  name: string;
+  kind: Kind;
+  options: string[];
+  source: "tool" | "format" | "question";
+  route: Route;
+  instructions?: string;
+}
 
 type Fetch = typeof globalThis.fetch;
 export interface TraceContext {
@@ -40,6 +53,12 @@ export interface Options {
   ttlMs?: number;
   /** Scope for every call made with this client, unless trace() or a header says otherwise. */
   scope?: string;
+  /**
+   * Rename a decision, or return null to leave it alone. Useful when keys are generated per item
+   * (`articles_1`, `articles_2` -> `articles_n`) or a field isn't really a decision.
+   *   name: d => d.name.replace(/\d+/g, "n")
+   */
+  name?: (d: Decision) => string | null | undefined;
 }
 
 const als = new AsyncLocalStorage<TraceContext>();
@@ -96,12 +115,21 @@ export function fetch(opts: Options = {}): Fetch {
     const route = method === "POST" ? routeOf(new URL(url).pathname) : null;
     if (!route) return inner(input, init);
 
+    // the name hook's answers, kept to send along so the server files each decision the same way
+    const names: Record<string, string | null> = {};
+    const rename: Rename | undefined = opts.name && ((key, d) => {
+      let n: string | null | undefined;
+      try { n = opts.name!({ name: key, ...d }); } catch { n = undefined; }
+      if (n !== undefined && n !== key) names[key] = n || null;
+      return n;
+    });
+
     let body: any, original: any;
     try {
       const raw = typeof init?.body === "string" ? init.body : await new Request(input, init).clone().text();
       body = JSON.parse(raw);
       original = JSON.parse(raw);           // as the code wrote it; replay applies each version to this
-      if (!specs(route, body).length) return inner(input, init);
+      if (!specs(route, body, rename).length) return inner(input, init);
     } catch { return inner(input, init); }
 
     const ctx = als.getStore() ?? {};
@@ -113,7 +141,7 @@ export function fetch(opts: Options = {}): Fetch {
     headers.delete("content-length");
 
     let versions: Record<string, number> = {};
-    try { versions = apply(route, body, resolve(await link.policies(), scope)); } catch { /* fail open: send as written */ }
+    try { versions = apply(route, body, resolve(await link.policies(), scope), rename); } catch { /* fail open: send as written */ }
 
     const t0 = Date.now();
     const res = await inner(url, { ...init, method, headers, body: JSON.stringify(body), signal: init?.signal ?? (input instanceof Request ? input.signal : undefined) });
@@ -123,6 +151,7 @@ export function fetch(opts: Options = {}): Fetch {
       clean.searchParams.delete("key");      // Gemini accepts the API key as ?key=
       res.clone().json().then(response => link.record({
         url: clean.toString(), status: res.status, ms: Date.now() - t0, versions, scope, ...ids, metadata: ctx.metadata ?? {},
+        ...(Object.keys(names).length ? { names } : {}),
         headers: Object.fromEntries([...headers].filter(([k]) => !SECRET.test(k))),
         request: original, response,
       })).catch(() => {});

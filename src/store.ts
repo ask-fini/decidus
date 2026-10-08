@@ -16,7 +16,7 @@ export interface LogEntry { round: number; pass: number | null; n: number | null
 export interface ReplayResult { id: number; human: string; model: string | null; pass: boolean; error?: string }
 
 export interface PolicyRow {
-  name: string; route: Spec["route"]; kind: Spec["kind"]; options: string[]; field: string | null;
+  name: string; route: Spec["route"]; kind: Spec["kind"]; options: string[]; field: string | null;   // field: path in the schema
   instructions: string | null; code_text: string | null; model: string | null; created_at: string;
 }
 /** A scope's pointer into the policy's versions. live = null: the scope runs its parent's version. */
@@ -30,6 +30,8 @@ export interface CaseRow {
   answer: string | null; confidence: number | null; escalated: boolean; decision: string | null;
   decided_at: string | null; used_in: number | null; status: number; ms: number; created_at: string;
   trace_id: string | null; conversation_id: string | null; event_id: string | null; headline: string; metadata: Record<string, unknown>;
+  /** The decision's own key in the request (see Spec.key), and the options this call had. */
+  spec: string | null; options: string[] | null;
   // bodies; null once pruned
   url: string; headers: Record<string, string>; request: any; response: any;
 }
@@ -63,7 +65,8 @@ const SCHEMA = `
   create table if not exists cases (
     id integer primary key autoincrement, policy text, scope text not null default '', version integer, model text,
     answer text, confidence real, escalated integer, decision text, decided_at text, used_in integer,
-    status integer, ms integer, created_at text, trace_id text, conversation_id text, event_id text, headline text, metadata text);
+    status integer, ms integer, created_at text, trace_id text, conversation_id text, event_id text, headline text, metadata text,
+    spec text, options text);
   drop index if exists cases_review;
   create index if not exists cases_wait on cases (policy, escalated, decision);
   create index if not exists cases_decided on cases (policy, used_in, scope, version, decision, answer) where decision is not null;
@@ -85,6 +88,9 @@ export class Store {
     const old = (this.db.prepare("pragma table_info(cases)").all() as any[]).some(c => c.name === "request");
     if (old) this.migrate01();
     this.db.exec(SCHEMA);
+    const cols = new Set((this.db.prepare("pragma table_info(cases)").all() as any[]).map(c => c.name));   // 0.2
+    if (!cols.has("spec")) this.db.exec("alter table cases add column spec text");
+    if (!cols.has("options")) this.db.exec("alter table cases add column options text");
   }
 
   /** 0.1 kept bodies in `cases` and one live pointer per policy. */
@@ -95,7 +101,9 @@ export class Store {
       insert into policies select name, route, kind, options, field, instructions, code_text, model, created_at from policies_01;
       insert into variants select name, '', live, suggestion from policies_01;
       insert into versions select policy, n, '', case when n > 0 then n - 1 end, text, because, cases, replay, null, created_at from versions_01;
-      insert into cases select id, policy, '', version, model, answer, confidence, escalated, decision, decided_at, used_in,
+      insert into cases (id, policy, scope, version, model, answer, confidence, escalated, decision, decided_at, used_in,
+        status, ms, created_at, trace_id, conversation_id, event_id, headline, metadata)
+        select id, policy, '', version, model, answer, confidence, escalated, decision, decided_at, used_in,
         status, ms, created_at, trace_id, null, null, headline, metadata from cases_01;
       insert into bodies select id, url, headers, request, response from cases_01;
       drop table policies_01; drop table versions_01; drop table cases_01;
@@ -116,7 +124,7 @@ export class Store {
     this.db.prepare(`insert into policies (name, route, kind, options, field, instructions, code_text, model, created_at)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?) on conflict (name) do update set route = excluded.route, kind = excluded.kind, options = excluded.options,
       field = excluded.field, instructions = excluded.instructions, code_text = excluded.code_text, model = coalesce(excluded.model, model)`)
-      .run(s.name, s.route, s.kind, JSON.stringify(s.options), s.field ?? null, s.instructions ?? null, s.codeText ?? null, model, now());
+      .run(s.name, s.route, s.kind, JSON.stringify(s.options), s.path ?? null, s.instructions ?? null, s.codeText ?? null, model, now());
     if (!this.version(s.name, 0)) {
       this.addVersion({ policy: s.name, n: 0, scope: "", base: null, text: {}, because: {}, cases: [], replay: null, log: null });
       this.setLive(s.name, "", 0);
@@ -189,13 +197,14 @@ export class Store {
 
   // ---------- cases ----------
   private caseRow(r: any): CaseRow {
-    return { ...r, metadata: j(r.metadata) ?? {}, headers: j(r.headers) ?? {}, request: j(r.request), response: j(r.response), escalated: !!r.escalated };
+    return { ...r, metadata: j(r.metadata) ?? {}, headers: j(r.headers) ?? {}, request: j(r.request), response: j(r.response), escalated: !!r.escalated,
+      options: j(r.options) };
   }
   addCase(c: NewCase): number {
     const r = this.db.prepare(`insert into cases (policy, scope, version, model, answer, confidence, escalated, status, ms, created_at,
-      trace_id, conversation_id, event_id, headline, metadata) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      trace_id, conversation_id, event_id, headline, metadata, spec, options) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(c.policy, c.scope, c.version, c.model, c.answer, c.confidence, c.escalated ? 1 : 0, c.status, c.ms, now(),
-        c.trace_id, c.conversation_id, c.event_id, c.headline, JSON.stringify(c.metadata));
+        c.trace_id, c.conversation_id, c.event_id, c.headline, JSON.stringify(c.metadata), c.spec, c.options ? JSON.stringify(c.options) : null);
     const id = Number(r.lastInsertRowid);
     this.seenScopes.get(c.policy)?.add(c.scope);
     this.db.prepare("insert into bodies (id, url, headers, request, response) values (?, ?, ?, ?, ?)")

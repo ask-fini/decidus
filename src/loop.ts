@@ -2,7 +2,7 @@
  * The loop: suggest a new policy version from decided cases, replay it against those cases,
  * auto-tune until they pass, accept it as the next live version, for one scope.
  */
-import { answers, apply, excerpt, rubric, within, type PolicyText, type Route } from "./shapes.js";
+import { answers, apply, excerpt, only, rubric, within, type PolicyText, type Route } from "./shapes.js";
 import type { CaseRow, PolicyRow, ReplayResult, Store, Suggestion } from "./store.js";
 
 const env = (k: string) => process.env[k] || undefined;
@@ -119,18 +119,37 @@ async function callWriter(prompt: string, options: string[]): Promise<Written> {
 
 // ---------------- prompts ----------------
 
+/** A value as people read it: multi-select answers are stored as JSON arrays. */
+function shown(v: string | null | undefined): string {
+  if (v == null) return "nothing";
+  if (v.startsWith("[")) { try { const a = JSON.parse(v); return a.length ? a.join(", ") : "none of the options"; } catch { /* plain */ } }
+  return v;
+}
+
 function caseBlock(p: PolicyRow, c: CaseRow, modelSaid?: string | null) {
-  const said = modelSaid !== undefined ? `${modelSaid ?? "nothing"} (this draft)` : `${c.answer ?? "nothing"} (v${c.version})`;
-  return `#${c.id} · decided: ${c.decision} · model said: ${said}\n${c.request ? excerpt(p.route as Route, c.request, 1500) : "(input no longer stored)"}`;
+  const said = modelSaid !== undefined ? `${shown(modelSaid)} (this draft)` : `${shown(c.answer)} (v${c.version})`;
+  return `#${c.id} · decided: ${shown(c.decision)} · model said: ${said}\n${c.request ? excerpt(p.route as Route, c.request, 1500) : "(input no longer stored)"}`;
+}
+
+/**
+ * The options a version covers: those of its cases (each call has its own, e.g. per customer) and
+ * those already described; the policy's latest options only when nothing else is known.
+ */
+function optionsOf(p: PolicyRow, cases: CaseRow[], ...texts: PolicyText[]): string[] {
+  const o = [...new Set([...cases.flatMap(c => c.options ?? []), ...texts.flatMap(t => Object.keys(t ?? {}))])];
+  return o.length ? o : p.options;
 }
 
 function basePrompt(p: PolicyRow, current: PolicyText, currentLabel: string, cases: CaseRow[]) {
+  const options = optionsOf(p, cases, current);
   return [
     `Decision: ${p.name} (${p.kind})`,
     p.instructions ? `Question: ${p.instructions}` : "",
-    `Options: ${p.options.join(", ")}`,
+    `Options: ${options.join(", ")}`,
+    p.kind === "multi" ? "The model may pick several options, or none. Each description says when an option applies." : "",
+    options.length > p.options.length ? "Calls offer different subsets of these options; a description is only shown when its option is offered." : "",
     `What the calling code already says:\n${p.code_text || "(nothing)"}`,
-    `Current policy (${currentLabel}):\n${rubric(current, p.options) || "(empty)"}`,
+    `Current policy (${currentLabel}):\n${rubric(current, options) || "(empty)"}`,
     `Decided cases:\n${cases.map(c => caseBlock(p, c)).join("\n---\n")}`,
   ].filter(Boolean).join("\n\n");
 }
@@ -179,7 +198,7 @@ export async function suggest(store: Store, name: string, scope: string, pick: {
   const carried = store.cases(base.cases).filter(c => c.decision != null && ours(c) && !freshIds.has(c.id))
     .sort((a, b) => b.id - a.id).slice(0, Math.max(0, max - fresh.length));
   const cases = [...fresh, ...carried].sort((a, b) => a.id - b.id);
-  const w = await callWriter(basePrompt(p, base.text, `v${eff.n}`, cases), p.options);
+  const w = await callWriter(basePrompt(p, base.text, `v${eff.n}`, cases), optionsOf(p, cases, base.text));
   const s: Suggestion = { base: eff.n, text: w.text, because: w.because, added: fresh.map(c => c.id), cases: cases.map(c => c.id),
     notes: w.notes, replay: null, tune: [], created_at: now() };
   store.setSuggestion(name, scope, s);
@@ -200,8 +219,9 @@ export function edit(store: Store, name: string, scope: string, text: PolicyText
     s = { base: eff.n, text: { ...base.text }, because: {}, added: [], cases, replay: null, tune: [], created_at: now() };
   }
   const next: PolicyText = {};
-  for (const o of p.options) { const t = String(text[o] ?? s.text[o] ?? "").trim(); if (t) next[o] = t; }
-  const changed = p.options.filter(o => (next[o] ?? "") !== (s!.text[o] ?? ""));
+  const keys = [...new Set([...p.options, ...Object.keys(s.text), ...Object.keys(text ?? {})])];
+  for (const o of keys) { const t = String(text[o] ?? s.text[o] ?? "").trim(); if (t) next[o] = t; }
+  const changed = keys.filter(o => (next[o] ?? "") !== (s!.text[o] ?? ""));
   if (!changed.length) return store.variant(name, scope).suggestion;
   const because = { ...s.because };
   for (const o of changed) because[o] = [];
@@ -214,6 +234,9 @@ export function edit(store: Store, name: string, scope: string, text: PolicyText
 
 /** Provider credentials on the machine running `decidus serve`, by host. */
 function auth(url: URL): Record<string, string> {
+  const gw = env("DECIDUS_GATEWAY_URL")?.replace(/\/$/, "");
+  if (gw && env("DECIDUS_GATEWAY_KEY") && (url.href === gw || url.href.startsWith(gw + "/")))
+    return { authorization: `Bearer ${env("DECIDUS_GATEWAY_KEY")}` };     // LiteLLM, OpenRouter, Portkey and other gateways in front of providers
   const h = url.hostname;
   if (h === "api.openai.com" && KEY.openai()) return { authorization: `Bearer ${KEY.openai()}` };
   if (h === "api.anthropic.com" && KEY.anthropic()) return { "x-api-key": KEY.anthropic()! };
@@ -227,7 +250,8 @@ async function replayOne(p: PolicyRow, c: CaseRow, text: PolicyText): Promise<Re
   if (!c.request || !c.url) return { id: c.id, human, model: null, pass: false, error: "input no longer stored" };
   try {
     const body = structuredClone(c.request);
-    if (Object.values(text).some(Boolean)) apply(p.route as Route, body, { [p.name]: { version: 1, text } });
+    const one = only(c.spec ?? c.policy, p.name);
+    if (Object.values(text).some(Boolean)) apply(p.route as Route, body, { [p.name]: { version: 1, text } }, one);
     const url = new URL(c.url);
     const r = await fetch(url, {
       method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(60_000),
@@ -235,7 +259,7 @@ async function replayOne(p: PolicyRow, c: CaseRow, text: PolicyText): Promise<Re
     });
     const j: any = await r.json().catch(() => null);
     if (!r.ok) return { id: c.id, human, model: null, pass: false, error: j?.error?.message ?? `HTTP ${r.status}` };
-    const model = answers(p.route as Route, c.request, j)[p.name]?.value ?? null;
+    const model = answers(p.route as Route, c.request, j, one)[p.name]?.value ?? null;
     return { id: c.id, human, model, pass: model === human };
   } catch (e: any) {
     return { id: c.id, human, model: null, pass: false, error: e?.message ?? String(e) };
@@ -281,7 +305,7 @@ export async function tune(store: Store, name: string, scope: string, rounds = 3
     const failing = results.filter(r => !r.pass);
     if (!failing.length) break;
     if (failing.every(r => r.error)) {
-      log.push({ round: log.length + 1, pass: passed(), n: results.length, note: "Replay calls failed; check the provider keys where decidus serve runs" });
+      log.push({ round: log.length + 1, pass: passed(), n: results.length, note: "Replay calls failed; check the provider or gateway keys where decidus serve runs" });
       break;
     }
     s = openSuggestion(store, name, scope);
@@ -290,11 +314,12 @@ export async function tune(store: Store, name: string, scope: string, rounds = 3
       `\n\nThis draft was replayed. These cases still fail:\n` +
       failing.filter(r => !r.error).map(r => caseBlock(p, cases.find(c => c.id === r.id)!, r.model)).join("\n---\n") +
       `\n\nRevise only what is needed so these pass without breaking the others. In "cases", list the failing case ids you fixed.`;
-    const w = await callWriter(prompt, p.options);
+    const options = optionsOf(p, cases, s.text);
+    const w = await callWriter(prompt, options);
     const now = store.variant(name, scope).suggestion;
     if (!sameDraft(now, s)) throw new Error("The suggestion changed while tuning; run auto-tune again.");
     s = now;
-    const changed = p.options.filter(o => w.text[o] && w.text[o] !== s.text[o]);
+    const changed = options.filter(o => w.text[o] && w.text[o] !== s.text[o]);
     if (!changed.length) {
       log.push({ round: log.length + 1, pass: passed(), n: results.length, note: "No rewording helps; the failing cases need a person" });
       break;

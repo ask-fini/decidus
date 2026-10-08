@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Decidus</title>
+<title>decidus</title>
 <style>
 :root{
   --ground:#F3F2EF;--surface:#FBFAF8;--sunken:#ECEBE7;
@@ -58,7 +58,7 @@ h1{margin:0 0 20px;font-size:22px;font-weight:600;letter-spacing:-.01em}
 .pr:last-child{border-bottom:0}
 .pr:hover{background:var(--sunken)}
 .pcell{display:flex;flex-direction:column;min-width:0}
-.pcell .mono{font-size:14px;font-weight:500}
+.pcell .mono{font-size:14px;font-weight:500;overflow-wrap:anywhere}
 .pi{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .hot{color:var(--rust);font-weight:500}
@@ -142,6 +142,9 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 .sg[aria-pressed="true"]{background:var(--ink);border:1px solid var(--ink);color:var(--ground)}
 .sg[aria-pressed="true"] kbd{border-color:transparent;color:inherit;opacity:.6}
 .sg:disabled{cursor:default}
+.savebar{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px}
+.savebar .primary{height:34px;font-size:13px}
+.savebar kbd{font:10px var(--mono);opacity:.7}
 .sg:disabled:not([aria-pressed="true"]){color:var(--ink3);background:transparent}
 .blk{border:1px solid var(--line2);border-radius:10px;background:var(--surface)}
 .bh{display:flex;align-items:center;gap:10px;height:40px;padding:0 16px;border-bottom:1px solid var(--line2);font-size:13px;font-weight:500}
@@ -207,7 +210,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 </head>
 <body>
 <header class="bar">
-  <div class="crumbs"><span class="mark" aria-hidden="true"></span><span class="brand">Decidus</span><span class="sep">·</span><span id="crumbs"></span></div>
+  <div class="crumbs"><span class="mark" aria-hidden="true"></span><span class="brand">decidus</span><span class="sep">·</span><span id="crumbs"></span></div>
   <div class="minfo" id="minfo"></div>
 </header>
 <main class="ov" id="ov"></main>
@@ -230,7 +233,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
   };
   const keep = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k,v) => { try { localStorage.setItem(k,v); } catch {} } };
 
-  const S = { view:"list", name:null, scope:"", data:null, tab:"queue", cur:null, caseView:null, sel:null, pick:new Set(), pickAll:false,
+  const S = { multi:new Set(), view:"list", name:null, scope:"", data:null, tab:"queue", cur:null, caseView:null, sel:null, pick:new Set(), pickAll:false,
     busy:null, error:null, overview:null, calls:{ q:"", rows:null, next:null }, editing:null };
 
   async function api(path, body) {
@@ -247,11 +250,20 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 
   function gate() {
     $("ov").hidden = true; $("app").hidden = true; $("gate").hidden = false;
-    $("gate").innerHTML = '<form class="gate" id="gf"><b>API key</b><span class="muted" style="font-size:13px">This Decidus server needs the key set in DECIDUS_API_KEY.</span><input id="gk" type="password" autocomplete="off" aria-label="API key"><button class="primary">Continue</button></form>';
+    $("gate").innerHTML = '<form class="gate" id="gf"><b>API key</b><span class="muted" style="font-size:13px">This decidus server needs the key set in DECIDUS_API_KEY.</span><input id="gk" type="password" autocomplete="off" aria-label="API key"><button class="primary">Continue</button></form>';
     $("gf").onsubmit = e => { e.preventDefault(); keep.set("decidus_key", $("gk").value.trim()); $("gate").hidden = true; route(); };
   }
 
-  const lab = o => o === "true" ? "Yes" : o === "false" ? "No" : o;
+  const lab = o => {
+    if (typeof o === "string" && o.startsWith("[")) { try { const a = JSON.parse(o); return a.length ? a.join(", ") : "none"; } catch {} }
+    return o === "true" ? "Yes" : o === "false" ? "No" : o;
+  };
+  const set = v => { try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } };
+  // the options a version covers: this policy's latest, plus every option its texts describe (they differ per customer)
+  const optsFor = (...texts) => {
+    const c = S.caseView, here = c && c.policy === S.data.policy.name && c.options?.length ? c.options : S.data.policy.options;
+    return [...new Set([...here, ...texts.flatMap(t => Object.keys(t || {}))])];
+  };
   const ago = iso => { const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? Math.round(s/60)+"m ago" : s < 86400 ? Math.round(s/3600)+"h ago" : new Date(iso).toLocaleDateString(); };
 
   // ---------------- JSON ----------------
@@ -309,7 +321,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
   }
   function agreement(list) {
     const seen = list.filter(a => a.n > 0);
-    if (!seen.length) return '<span class="muted">—</span>';
+    if (!seen.length) return '<span class="agr muted">—</span>';
     const a = seen[0], b = seen.at(-1);
     if (a === b) return `<span class="agr"><span>${pct(a.agree, a.n)}</span><small>v${a.v} · ${fmt(a.n)}</small></span>`;
     const up = b.agree / b.n >= a.agree / a.n;
@@ -331,7 +343,7 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     $("ov").innerHTML = `<div class="ov-in"><h1>Policies</h1><div class="ptable">
       <div class="ph-row"><span>Policy</span><span>Model</span><span>Live</span><span class="num">Calls · 14 days</span><span class="num">Agreement</span><span class="num">Queue</span><span class="num">To process</span><span class="num">Replay</span></div>
       ${rows.map(p => `<button type="button" class="pr" data-open="${esc(p.name)}">
-        <span class="pcell"><span class="mono">${esc(p.name)}</span><span class="pi">${esc(p.instructions || "")}</span></span>
+        <span class="pcell"><span class="mono">${esc(p.name).replace(/\./g, ".<wbr>")}</span><span class="pi">${esc(p.instructions || "")}</span></span>
         <span class="pcell"><span class="mono" style="font-size:13px">${esc(p.model || "—")}</span><span class="pi">${esc(p.route)} · ${esc(p.kind)}</span></span>
         <span class="pcell"><span class="mono" style="font-size:13px">${p.live ? '<i class="dot"></i> ' : ""}v${p.live}</span>${p.overrides ? `<span class="pi">+${p.overrides} scoped</span>` : ""}</span>
         <span class="calls">${spark(p.daily)}<span class="mono">${fmt(p.calls)}</span></span>
@@ -413,7 +425,8 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
 
   async function open(id, render = true) {
     S.cur = id; S.caseView = await api("/api/cases/" + id);
-    if (render) { renderList(); renderDetail(); document.querySelector(".row.on")?.scrollIntoView({ block:"nearest" }); }
+    S.multi = new Set(set(S.caseView.decision ?? S.caseView.answer ?? "[]"));
+    if (render) { renderList(); renderDetail(); if (!S.editing) renderPane(); document.querySelector(".row.on")?.scrollIntoView({ block:"nearest" }); }
   }
 
   function renderDetail() {
@@ -427,7 +440,9 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       <div class="d">
         <div class="d-meta">${esc(new Date(c.created_at).toLocaleString())} · ${esc(c.ms)} ms</div>
         <div class="decide"><div class="said${sure(c) ? " sure" : ""}">${c.answer == null ? "Model gave no answer" : `model → <b>${esc(lab(c.answer))}</b>${c.confidence != null ? " · " + Number(c.confidence).toFixed(2) : " · no confidence reported"}`}</div>
-          <div class="seg">${p.options.map((o, i) => `<button class="sg${o === c.answer ? " mp" : ""}" data-decide="${esc(o)}" aria-pressed="${c.decision === o}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(lab(o))}</button>`).join("")}</div></div>
+          ${p.kind === "multi" ? `<div class="seg">${opts(c).map((o, i) => `<button class="sg${set(c.answer).includes(o) ? " mp" : ""}" data-toggle="${esc(o)}" aria-pressed="${S.multi.has(o)}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(o)}</button>`).join("")}</div>
+            ${locked ? "" : `<div class="savebar"><span class="muted">${S.multi.size ? [...S.multi].map(esc).join(", ") : "none"}</span><button class="primary" id="saveMulti">${c.decision != null && JSON.stringify([...S.multi].sort()) === c.decision ? "Saved" : "Save"} <kbd>↵</kbd></button></div>`}`
+          : `<div class="seg">${opts(c).map((o, i) => `<button class="sg${o === c.answer ? " mp" : ""}" data-decide="${esc(o)}" aria-pressed="${c.decision === o}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(lab(o))}</button>`).join("")}</div>`}</div>
         ${hasIds ? block("Call", '<span class="mono">from your app</span>', ids) : ""}
         ${block("Input", `<span class="mono">${c.url ? esc(new URL(c.url).pathname) + " · " : ""}v${esc(c.version)}</span>`, c.sent)}
         ${block("Output", `<span class="mono">HTTP ${esc(c.status)}</span>`, c.response)}
@@ -476,12 +491,12 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     if (S.error) h += `<div class="err">${esc(S.error)}</div>`;
 
     if (S.editing) {
-      h += `<form class="edit" id="editForm">${p.options.map(o => `<label>"${esc(o)}"<textarea name="${esc(o)}" rows="2">${esc(S.editing[o] || "")}</textarea></label>`).join("")}</form>
+      h += `<form class="edit" id="editForm">${optsFor(cur.text, S.editing).map(o => `<label>"${esc(o)}"<textarea name="${esc(o)}" rows="2">${esc(S.editing[o] || "")}</textarea></label>`).join("")}</form>
         <div class="sugbar"><button class="ghost" id="editCancel">Cancel</button><button class="primary" id="editSave">Save as suggestion</button></div>`;
       $("policy").innerHTML = h; return;
     }
 
-    h += `<div class="code">${textLines(cur.text, prevText, cur.because, p.options, !!prevText)}</div>`;
+    h += `<div class="code">${textLines(cur.text, prevText, cur.because, optsFor(cur.text, prevText), !!prevText)}</div>`;
     if (!isSug && cur.n === 0 && p.code_text) h += `<div class="notes code0"><b>In your code</b>\n${esc(p.code_text)}</div>`;
     const notes = isSug ? sug.notes : cur.log?.notes;
     if (notes) h += `<div class="notes">${esc(notes)}</div>`;
@@ -513,6 +528,9 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     await load();
     renderPolicy();
   }
+
+  const opts = c => (c.options?.length ? c.options : S.data.policy.options);
+  const toggle = o => { S.multi.has(o) ? S.multi.delete(o) : S.multi.add(o); renderDetail(); };
 
   async function decideCur(value) {
     const id = S.cur, before = rowsNow().map(c => c.id), at = before.indexOf(id);
@@ -563,10 +581,13 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       const c = S.data.queue.find(x => x.id === +ok.dataset.ok);
       if (!c) return refresh();
       if (S.cur !== c.id) await open(c.id, false);
-      return decideCur(c.answer);
+      return decideCur(S.data.policy.kind === "multi" ? set(c.answer) : c.answer);
     }
     const dc = t.closest("[data-decide]");
     if (dc && !dc.disabled) return decideCur(dc.dataset.decide);
+    const tg = t.closest("[data-toggle]");
+    if (tg && !tg.disabled) return toggle(tg.dataset.toggle);
+    if (t.closest("#saveMulti")) return decideCur([...S.multi]);
     const cs = t.closest("[data-case]"); if (cs) { await open(+cs.dataset.case); return; }
     if (t.closest("#pickAll")) { S.pickAll = true; renderList(); return; }
     const v = t.closest("[data-v]"); if (v) { S.sel = v.dataset.v === "S" ? "S" : +v.dataset.v; S.editing = null; renderPane(); return; }
@@ -598,7 +619,10 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       const step = e.key === "j" || e.key === "ArrowDown" ? 1 : -1, next = list[Math.max(0, Math.min(list.length - 1, i + step))];
       if (next) { e.preventDefault(); open(next.id); }
     } else if (/^[1-9]$/.test(e.key) && free) {
-      const o = S.data.policy.options[+e.key - 1]; if (o) { e.preventDefault(); decideCur(o); }
+      const o = opts(c)[+e.key - 1];
+      if (o) { e.preventDefault(); S.data.policy.kind === "multi" ? toggle(o) : decideCur(o); }
+    } else if (e.key === "Enter" && free && S.data.policy.kind === "multi" && !e.target.closest("button:not(.rb)")) {
+      e.preventDefault(); decideCur([...S.multi]);
     } else if (e.key === "Enter" && free && c.answer != null && c.decision == null && !e.target.closest("button:not(.rb)")) {
       e.preventDefault(); decideCur(c.answer);
     } else if (e.key === "x" && S.tab === "decided" && free && c.decision != null) {

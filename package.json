@@ -1,7 +1,7 @@
 {
   "name": "decidus",
-  "version": "0.2.0",
-  "description": "The policy loop for decision models: humans decide what the model couldn't, Decidus writes the next policy version.",
+  "version": "0.3.0",
+  "description": "The policy loop for decision models: people decide what the model couldn't, decidus writes the next policy version. Structured outputs, tool calls, OpenAI Decisions and Jev, direct or through a gateway.",
   "license": "MIT",
   "homepage": "https://decidus.ai",
   "repository": {
@@ -25,7 +25,7 @@
     }
   },
   "bin": {
-    "decidus": "./dist/cli.js"
+    "decidus": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -46,7 +46,10 @@
     "openai",
     "anthropic",
     "gemini",
-    "jev"
+    "jev",
+    "structured outputs",
+    "litellm",
+    "gateway"
   ],
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

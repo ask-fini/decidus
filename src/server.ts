@@ -1,6 +1,6 @@
 import http from "node:http";
 import { readFileSync } from "node:fs";
-import { answers, apply, headline, normScope, prefixes, routeOf, specs, type Route } from "./shapes.js";
+import { apply, decided, headline, multi, normScope, only, prefixes, routeOf, type Rename, type Route } from "./shapes.js";
 import { Store, type CallFilter } from "./store.js";
 import { accept, edit, replay, suggest, tune } from "./loop.js";
 
@@ -45,12 +45,14 @@ export function ingest(store: Store, rec: any, warmup = 20, sample = 0.1): numbe
   const model = modelOf(url, rec.request);
   const scope = normScope(rec.scope);
   const status = int(rec.status);
-  const said = answers(route, rec.request, rec.response);
-  for (const s of specs(route, rec.request)) {
+  // the client's name hook, as {decision key: policy name, or null to leave it alone}
+  const names = rec.names && typeof rec.names === "object" ? rec.names as Record<string, string | null> : null;
+  const rename: Rename | undefined = names ? k => (k in names ? names[k] : undefined) : undefined;
+  for (const s of decided(route, rec.request, rec.response, rename)) {
     store.seen(s, model);
-    const a = said[s.name];
+    const a = s.answer;
     ids.push(store.addCase({
-      policy: s.name, scope, version: int(rec.versions?.[s.name]), model,
+      policy: s.name, spec: s.key, options: s.options, scope, version: int(rec.versions?.[s.name]), model,
       answer: a.value, confidence: a.confidence, escalated: status < 400 && eligible(store, s.name, scope, a, warmup, sample),
       status, ms: int(rec.ms),
       trace_id: str(rec.trace_id), conversation_id: str(rec.conversation_id), event_id: str(rec.event_id),
@@ -124,7 +126,7 @@ function caseView(store: Store, id: number) {
   if (c.request && c.url) {
     sent = structuredClone(c.request);
     const v = store.version(c.policy, c.version);
-    if (v && c.version > 0) apply(routeOf(new URL(c.url).pathname) as Route, sent, { [c.policy]: { version: c.version, text: v.text } });
+    if (v && c.version > 0) apply(routeOf(new URL(c.url).pathname) as Route, sent, { [c.policy]: { version: c.version, text: v.text } }, only(c.spec ?? c.policy, c.policy));
   }
   return { ...c, sent };
 }
@@ -194,7 +196,7 @@ export function createServer(opts: ServeOptions = {}) {
         return c ? send(200, c) : send(404, { error: "no such case" });
       }
       if (req.method === "POST" && (r = m(/^\/api\/cases\/(\d+)\/decide$/))) {
-        store.decide(Number(r[1]), body.value ?? null);
+        store.decide(Number(r[1]), Array.isArray(body.value) ? multi(body.value) : body.value == null ? null : String(body.value));
         return send(200, { ok: true });
       }
       if (req.method === "POST" && (r = m(/^\/api\/policies\/([^/]+)\/(suggest|edit|replay|tune|accept|discard|live)$/))) {

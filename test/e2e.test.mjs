@@ -88,7 +88,7 @@ const TICKETS = [
 
 test("first sight: forced tool call becomes a v0 policy with its options; calls still answered", async () => {
   for (const [text] of TICKETS) assert.equal(teamOf(await route(text)), "billing");   // v0 model knows nothing
-  const d = await until(async () => { const d = await api("/api/policies/route_conversation").catch(() => null); return d?.queue.length === 6 && d; });
+  const d = await until(async () => { const d = await api("/api/policies/route_conversation.team").catch(() => null); return d?.queue.length === 6 && d; });
   assert.deepEqual(d.policy.options, ["billing", "technical", "shipping"]);
   assert.equal(d.policy.field, "team");
   assert.deepEqual(d.effective, { n: 0, from: "" });
@@ -104,26 +104,26 @@ test("plain chat and unforced calls pass through without a record", async () => 
 });
 
 test("decide, suggest, replay fails one, auto-tune fixes it, accept as v1", async () => {
-  const d = await api("/api/policies/route_conversation");
+  const d = await api("/api/policies/route_conversation.team");
   const byId = [...d.queue].sort((a, b) => a.id - b.id);
   for (const [i, c] of byId.entries()) await api(`/api/cases/${c.id}/decide`, { value: TICKETS[i][1] });
 
-  const s = await api("/api/policies/route_conversation/suggest", { cases: byId.map(c => c.id) });
+  const s = await api("/api/policies/route_conversation.team/suggest", { cases: byId.map(c => c.id) });
   assert.equal(s.base, 0);
   assert.match(s.text.billing, /charges/);
 
-  const r1 = await api("/api/policies/route_conversation/replay", { target: "suggestion" });
+  const r1 = await api("/api/policies/route_conversation.team/replay", { target: "suggestion" });
   assert.equal(r1.filter(x => x.pass).length, 4, "the vague shipping wording should fail both parcel cases");
 
-  const tuned = await api("/api/policies/route_conversation/tune", {});
+  const tuned = await api("/api/policies/route_conversation.team/tune", {});
   assert.match(tuned.text.shipping, /parcel/);
   assert.ok(tuned.replay.every(x => x.pass));
   assert.equal(tuned.tune.at(-1).pass, 6);
   assert.equal(writerCalls, 2);
 
-  const { live } = await api("/api/policies/route_conversation/accept", {});
+  const { live } = await api("/api/policies/route_conversation.team/accept", {});
   assert.equal(live, 1);
-  const after = await api("/api/policies/route_conversation");
+  const after = await api("/api/policies/route_conversation.team");
   assert.equal(after.processed.length, 6);
   assert.ok(after.processed.every(c => c.used_in === 1));
   assert.equal(after.queue.length, 0);
@@ -140,7 +140,7 @@ test("after the cache refreshes, calls carry v1 and the model now gets it right"
   assert.match(sent.tools[0].function.parameters.properties.team.description, /shipping: parcel delayed/);
   assert.deepEqual(sent.tools[0].function.parameters.properties.team.enum, ["billing", "technical", "shipping"]);
 
-  const d = await until(async () => { const d = await api("/api/policies/route_conversation/calls"); return d.calls.length === 8 && d; });
+  const d = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls"); return d.calls.length === 8 && d; });
   const last = await api(`/api/cases/${d.calls[0].id}`);
   assert.equal(last.version, 1);
   assert.equal(last.trace_id, "tr_9f2c41");
@@ -157,13 +157,13 @@ test("Anthropic forced tool with a boolean field becomes a bool policy", async (
     tools: [{ name: "needs_human", description: "Should a person take over?", input_schema: { type: "object", properties: { needs_human: { type: "boolean" } }, required: ["needs_human"] } }],
     tool_choice: { type: "tool", name: "needs_human" } });
   assert.equal(r.content[0].input.needs_human, true);
-  const d = await until(async () => (await api("/api/policies/needs_human").catch(() => null)));
+  const d = await until(async () => (await api("/api/policies/needs_human.needs_human").catch(() => null)));
   assert.equal(d.policy.kind, "bool");
   assert.deepEqual(d.policy.options, ["true", "false"]);
   assert.equal(d.queue[0].answer, "true");
 });
 
-test("Decidus down: calls go out exactly as written", async () => {
+test("decidus down: calls go out exactly as written", async () => {
   const f = decidus.fetch({ baseUrl: "http://127.0.0.1:1", ttlMs: 0 });
   const o = new OpenAI({ apiKey: "sk-test", baseURL: mock + "/v1", fetch: f });
   const r = await o.chat.completions.create({ model: "gpt-5-mini", messages: [{ role: "user", content: "parcel late" }], tools: [ROUTE_TOOL],
