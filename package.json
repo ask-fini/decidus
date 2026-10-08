@@ -1,0 +1,57 @@
+{
+  "name": "decidus",
+  "version": "0.2.0",
+  "description": "The policy loop for decision models: humans decide what the model couldn't, Decidus writes the next policy version.",
+  "license": "MIT",
+  "homepage": "https://decidus.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ask-fini/decidus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ask-fini/decidus/issues"
+  },
+  "author": "Fini (https://usefini.com)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "decidus": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "ui",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test --test-concurrency=1 test/*.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "decision models",
+    "llm",
+    "function calling",
+    "human in the loop",
+    "openai",
+    "anthropic",
+    "gemini",
+    "jev"
+  ],
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@types/node": "^22.20.5",
+    "openai": "^7.30.0",
+    "typescript": "^5.9.3"
+  }
+}

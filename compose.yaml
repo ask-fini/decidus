@@ -1,0 +1,17 @@
+# docker compose up -d   ->  http://localhost:7700
+# Your apps then set DECIDUS_BASE_URL=http://<this host>:7700 and the same DECIDUS_API_KEY.
+services:
+  decidus:
+    build: .
+    ports: ["7700:7700"]
+    environment:
+      DECIDUS_API_KEY: ${DECIDUS_API_KEY:?set DECIDUS_API_KEY; your apps and the UI use it}
+      # writes suggestions, and replays against these providers
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+    volumes: ["decidus:/data"]
+    restart: unless-stopped
+volumes:
+  decidus: {}
