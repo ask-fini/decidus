@@ -1,6 +1,6 @@
 {
   "name": "decidus",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The policy loop for decision models: people decide what the model couldn't, decidus writes the next policy version. Structured outputs, tool calls, OpenAI Decisions and Jev, direct or through a gateway.",
   "license": "MIT",
   "homepage": "https://decidus.ai",
