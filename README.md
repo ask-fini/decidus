@@ -4,6 +4,11 @@
 
 Turn the decisions you review into the next policy you ship.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-dark.png">
+  <img alt="decidus: people corrected the model on a few cases; the suggested policy is a diff tied to those cases, and every replay now passes" src="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-light.png">
+</picture>
+
 decidus records your model's choices and turns reviewed cases into proposed policy changes. Inspect the diff, replay those cases, and put the version you choose live without changing application code. One fetch wrapper connects to the SDK you already use.
 
 Works with structured outputs and forced tool calls on OpenAI, Anthropic and Gemini, directly or through gateways such as LiteLLM and OpenRouter. Also supports the OpenAI Decisions API and TypeSafe Jev.
