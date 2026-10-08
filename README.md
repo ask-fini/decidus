@@ -4,10 +4,12 @@
 
 Turn the decisions you review into the next policy you ship.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-dark.png">
-  <img alt="decidus: people corrected the model on a few cases; the suggested policy is a diff tied to those cases, and every replay now passes" src="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-light.png">
-</picture>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-loop-light.gif">
+    <img src="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-loop-dark.gif" width="720" alt="A person corrects the model on a call; a model rewrites the policy as a diff; replay shows 3 failing cases; auto-tune rewords until all pass; accept puts v2 live">
+  </picture>
+</p>
 
 decidus records your model's choices and turns reviewed cases into proposed policy changes. Inspect the diff, replay those cases, and put the version you choose live without changing application code. One fetch wrapper connects to the SDK you already use.
 
