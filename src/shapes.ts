@@ -474,6 +474,11 @@ export function excerpt(route: Route, body: J, max = 2400): string {
 
 /** The last customer-ish message, for list rows. */
 export function headline(route: Route, body: J): string {
+  if (route === "systemone" && body?.state && typeof body.state === "object") {
+    const e = Object.entries<J>(body.state).filter(([, v]) => typeof v === "string" && v.trim());
+    const best = e.find(([k]) => /message|question|reply|text|input/i.test(k)) ?? e[0];
+    if (best) return String(best[1]).replace(/\s+/g, " ").slice(0, 160);
+  }
   const ex = excerpt(route, body, 4000).split("\n").filter(l => !l.startsWith("system:") && !l.startsWith("developer:"));
   const user = ex.filter(l => l.startsWith("user:")).pop() ?? ex.pop() ?? "";
   return user.replace(/^user:\s*/, "").slice(0, 160);

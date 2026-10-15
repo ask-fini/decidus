@@ -484,7 +484,7 @@ export function rebase(store: Store, name: string, scope: string): number {
   const ops: Doc = { ...v.ops };
   for (const p of t.parts) {
     if (!v.ops[p.part]?.length) continue;
-    ops[p.part] = rebaseOps(v.ops[p.part], v.keys[p.part] ?? [], p.clauses.map(c => c.key).filter(Boolean), new Set(p.static));
+    ops[p.part] = rebaseOps(v.ops[p.part], v.keys[p.part] ?? [], p.clauses.map(c => c.key).filter(Boolean), new Set(p.stable));
   }
   const n = store.nextVersion(name);
   store.addVersion({ policy: name, n, scope, base: eff.n, ops, keys: staticKeys(t), because: {}, cases: v.cases, replay: null,

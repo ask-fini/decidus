@@ -78,7 +78,7 @@ function overview(store: Store) {
     const g = variants.find(v => !v.scope);
     const live = g?.live ?? 0;
     return {
-      name: p.name, kind: p.kind, route: p.route, model: p.model, instructions: p.instructions, live,
+      name: p.name, kind: p.kind, route: p.route, model: p.model, instructions: p.instructions, live, ready: templateOf(store, p.name, "").ready,
       overrides: variants.filter(v => v.scope && v.live != null).length,
       drafts: variants.filter(v => v.draft).length,
       candidate: g?.candidate ?? null,

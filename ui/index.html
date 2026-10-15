@@ -11,7 +11,7 @@
   --line:#DEDCD6;--line2:#E9E7E2;
   --accent:#2B5876;--accent-ink:#FFFFFF;--accent-tint:#E4ECF1;
   --rust:#9A4829;--pass:#2F6B4A;--pass-tint:#E3EFE7;--fail:#A63D2A;--fail-tint:#F5E4DF;
-  --add:#E6EEF3;--del:#F6E9E5;--warn:#7A5300;--warn-tint:#F5ECD7;
+  --add:#E6EEF3;--del:#F6E9E5;
   --jk:#1F6096;--str:#2E6B45;--num:#9A4829;--lit:#6B4FA0;
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -22,7 +22,7 @@
   --ink:#E6E8EA;--ink2:#9CA3AA;--ink3:#6C747B;--line:#2D3237;--line2:#252A2F;
   --accent:#86B3D3;--accent-ink:#0F1A22;--accent-tint:#1F2C36;
   --rust:#DB8F6E;--pass:#74BD92;--pass-tint:#1C2C23;--fail:#E88E78;--fail-tint:#33211C;
-  --add:rgba(134,179,211,.10);--del:rgba(232,142,120,.10);--warn:#E2B866;--warn-tint:#2E2716;
+  --add:rgba(134,179,211,.10);--del:rgba(232,142,120,.10);
   --jk:#8CC0EA;--str:#9ED0AE;--num:#DB8F6E;--lit:#B9A3E0;
 }}
 *{box-sizing:border-box}
@@ -77,7 +77,6 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 .app{flex:1;min-height:0;display:grid;grid-template-columns:360px minmax(0,1fr) 480px}
 .pane{min-height:0;overflow:auto;border-right:1px solid var(--line);display:flex;flex-direction:column}
 .pane:last-child{border-right:0}
-.pane>*{flex-shrink:0}
 .ph{position:sticky;top:0;z-index:1;flex:none;display:flex;align-items:center;gap:10px;min-height:44px;padding-inline:12px 16px;background:var(--ground);border-bottom:1px solid var(--line2);font-size:13px}
 .tabs{display:flex;gap:2px;flex-wrap:wrap}
 .tab{height:32px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--ink2);font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
@@ -177,7 +176,8 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 .notes b{font:500 12px var(--sans);color:var(--ink)}
 .stat{padding:0 16px 4px;font:12px var(--mono);color:var(--ink2)}
 .stat b{font-weight:500;color:var(--ink)}
-.sugbar{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px}
+.sugbar{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:12px 16px}
+.sugbar button{white-space:nowrap}
 .sugbar .primary{height:36px;font-size:13px}
 .replay{border-top:1px solid var(--line2);padding:16px;display:flex;flex-direction:column;gap:12px}
 .r-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -191,52 +191,46 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 .tlog{list-style:none;margin:0;padding:10px 0 0;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px}
 .tlog li{display:grid;grid-template-columns:18px 48px minmax(0,1fr);gap:8px;font-size:12px;line-height:18px;color:var(--ink2)}
 
-/* the decision's text */
-.banner{margin:12px 16px 0;padding:10px 12px;border-radius:8px;font-size:12.5px;line-height:18px;display:flex;flex-direction:column;gap:8px}
-.banner.obs{background:var(--sunken);color:var(--ink2)}
-.banner.warn{background:var(--warn-tint);color:var(--warn)}
-.banner b{font-weight:600}
-.banner ul{margin:0;padding-left:18px;font:12px/18px var(--mono)}
-.banner .ghost{align-self:flex-start;height:30px;border-color:currentColor;color:inherit}
-.obsbar{height:4px;border-radius:2px;background:var(--line)}
-.obsbar i{display:block;height:100%;border-radius:2px;background:var(--accent)}
-.parts{padding:12px 16px 4px;display:flex;flex-direction:column;gap:14px}
-.part h3{margin:0 0 6px;font:500 12px var(--mono);color:var(--jk);display:flex;gap:8px;align-items:center}
-.part h3 .muted{font-weight:400}
-.ptext{font:12.5px/21px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--surface)}
-.ptext .none{color:var(--ink3)}
-.cl{border-radius:3px}
-.cl:hover{background:var(--sunken)}
-.lk{display:none;vertical-align:-2px;width:16px;height:16px;margin-left:2px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink3);cursor:pointer;place-items:center}
-.lk svg{width:11px;height:11px}
-.cl:hover .lk{display:inline-grid}
-.lk:hover{color:var(--ink);background:var(--line)}
-.cl.locked{background:var(--sunken)}
-.cl.locked .lk{display:inline-grid;color:var(--ink)}
-.dy{color:var(--ink3);cursor:pointer;border-radius:3px}
-.dy:hover{background:var(--sunken)}
-.dy .tag,.chip{font:10px/14px var(--sans);padding:0 4px;border:1px solid var(--line);border-radius:4px;margin-right:4px;color:var(--ink2);white-space:nowrap}
-.dy .full{display:none}.dy.open .full{display:inline}.dy.open .short{display:none}
-.dl{color:var(--ink3);text-decoration:line-through;text-decoration-color:var(--fail)}
-.ad{background:var(--accent-tint);color:var(--accent);border-radius:3px}
-.legend{display:flex;flex-direction:column;gap:4px;padding:0 16px;font:11.5px/17px var(--mono);color:var(--ink2)}
-.stagebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px}
-.stagebar .lbl{font-size:12px;color:var(--ink2)}
-.pct{width:70px;height:36px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font:12px var(--mono)}
-.cmp{margin:12px 16px 0;border:1px solid var(--line2);border-radius:10px;background:var(--surface);overflow:hidden}
-.cmp .bh{gap:4px 10px;height:auto;min-height:40px;padding:8px 16px;flex-wrap:wrap}
-.cmp table{width:100%;border-collapse:collapse;font:12px/17px var(--mono)}
-.cmp th,.cmp td{padding:7px 12px;text-align:left;vertical-align:top;border-top:1px solid var(--line2);font-weight:400}
-.cmp th{color:var(--ink2);font-family:var(--sans)}
-.cmp thead th{border-top:0;color:var(--ink);font-family:var(--mono)}
-.cmp .stagebar{border-top:1px solid var(--line2)}
-.dist{display:flex;flex-direction:column;gap:3px}
-.dist span{display:flex;justify-content:space-between;gap:8px}
-.tab .chip{margin:0 0 0 4px}
+/* 0.4: text that varies per call, locks, trying a draft on traffic */
+.src .vary{color:var(--ink3)}
+/* the diff, in a modal: one clause per line */
+dialog.diff{width:min(920px,calc(100vw - 32px));max-height:86vh;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 24px 64px rgba(0,0,0,.18)}
+dialog.diff::backdrop{background:rgba(20,22,24,.32)}
+.dh{position:sticky;top:0;z-index:1;display:flex;align-items:baseline;gap:10px;padding:16px 20px 14px;border-bottom:1px solid var(--line2);background:var(--surface)}
+.dh b{font-weight:600}
+.dh .x{margin-left:auto;align-self:center;width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:var(--ink2);font-size:18px;line-height:1;cursor:pointer}
+.dh .x:hover{background:var(--sunken)}
+.db{padding:4px 0 20px}
+.dlive{margin:14px 20px 0;font:12px/19px var(--mono);color:var(--ink2)}
+.dpart{margin-top:18px}
+.dpart h4{display:flex;gap:10px;align-items:baseline;margin:0;padding:0 20px 6px;font:500 12.5px var(--mono);color:var(--jk)}
+.dpart h4 .muted{font-weight:400}
+.dpart h4 .refs{margin-left:auto;max-width:none;padding:0}
+.dl{display:grid;grid-template-columns:32px minmax(0,1fr) 44px 30px;align-items:start;font:12.5px/22px var(--mono)}
+.dl .m{text-align:center;color:var(--ink3);user-select:none}
+.dl .t{white-space:pre-wrap;overflow-wrap:anywhere;padding-right:8px}
+.dl .c{text-align:right;color:var(--ink3);font-size:11.5px}
+.dl.add{background:var(--pass-tint)}.dl.add .m{color:var(--pass)}
+.dl.cut{background:var(--fail-tint)}.dl.cut .m{color:var(--fail)}.dl.cut .t{color:var(--ink2)}
+.dnote{margin:14px 20px 0;font-size:13px;line-height:1.5;color:var(--ink2)}
+.dl.var .t{color:var(--ink3)}
+.dl .lk{opacity:0;justify-self:center;width:22px;height:22px;border:0;border-radius:5px;background:transparent;color:var(--ink3);display:grid;place-items:center;padding:0;cursor:pointer}
+.dl:hover .lk,.dl .lk.on,.dl .lk:focus-visible{opacity:1}
+.dl .lk:hover{background:var(--sunken);color:var(--ink)}
+.dl .lk.on{color:var(--ink)}
+.dl .lk svg{width:11px;height:11px}
+.dl.gap{cursor:pointer;color:var(--ink3);font-size:12px}
+.dl.gap:hover{background:var(--sunken)}
+.dfoot{padding:16px 20px 0;font-size:12px;color:var(--ink3)}
+.notes.warn{color:var(--rust)}
+.ph+.notes,.ph+.err+.notes{margin-top:12px}
+.notes .linkbtn{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.notes .mono{font-size:12px}
+.try{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 12px;font-size:12.5px;color:var(--ink2)}
+.try select,.try input{height:32px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font:12px var(--mono)}
+.try input{width:60px}
 .ofilter{width:100%;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--ground);font:12px var(--mono)}
-.words{display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:19px}
-.words .k{font:11px var(--mono);color:var(--ink3);display:block}
-.r-m .sh{color:var(--accent)}
+.tab .ct{margin-left:2px}
 
 .gate{max-width:420px;margin:15vh auto;padding:24px;border:1px solid var(--line);border-radius:10px;background:var(--surface);display:flex;flex-direction:column;gap:12px}
 .gate input{height:40px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--ground);color:var(--ink);font:13px var(--mono)}
@@ -268,6 +262,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
   <section class="pane" id="policy" aria-label="Policy"></section>
 </main>
 <main id="gate" hidden></main>
+<dialog class="diff" id="dlg" aria-label="Changes"></dialog>
 
 <script>
 (() => {
@@ -283,7 +278,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
   const keep = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k,v) => { try { localStorage.setItem(k,v); } catch {} } };
 
   const S = { multi:new Set(), view:"list", name:null, scope:"", data:null, tab:"queue", cur:null, caseView:null, sel:null, pick:new Set(), pickAll:false,
-    busy:null, error:null, overview:null, calls:{ q:"", rows:null, next:null }, editing:null, text:null, pct:10, ofilter:"", copied:false };
+    busy:null, error:null, overview:null, calls:{ q:"", rows:null, next:null }, editing:null, editSample:null, text:null, trying:false, ofilter:"", copied:false, gaps:new Set() };
 
   async function api(path, body) {
     const key = keep.get("decidus_key");
@@ -328,13 +323,14 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 
   // ---------------- routing: #/p/<name>?scope=<scope> ----------------
   function route() {
+    if ($("dlg").open) $("dlg").close();
     const m = location.hash.match(/^#\/p\/([^?]+)(?:\?(.*))?$/);
     if (m) {
       const name = decodeURIComponent(m[1]), scope = new URLSearchParams(m[2] || "").get("scope") || "";
       S.view = "policy";
       if (S.name !== name || S.scope !== scope) {
         if (S.name !== name) S.tab = "queue";
-        Object.assign(S, { name, scope, data:null, cur:null, caseView:null, sel:null, pickAll:false, error:null, editing:null, text:null, calls:{ q:S.calls.q, rows:null, next:null } });
+        Object.assign(S, { name, scope, data:null, cur:null, caseView:null, sel:null, pickAll:false, error:null, editing:null, text:null, trying:false, calls:{ q:S.calls.q, rows:null, next:null } });
         S.pick.clear();
       }
     } else { S.view = "list"; S.name = null; }
@@ -346,13 +342,13 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
   async function load() {
     S.data = await api(scoped(P()));
     const d = S.data;
-    if (S.sel == null || (S.sel === "D" && !d.draft) || (S.sel !== "D" && !d.versions.some(v => v.n === S.sel))) S.sel = d.draft ? "D" : d.effective.n;
+    if (S.sel == null || (S.sel === "S" && !d.draft) || (S.sel !== "S" && !d.versions.some(v => v.n === S.sel)))
+      S.sel = d.draft ? "S" : d.candidate && d.versions.some(v => v.n === d.candidate.n) ? d.candidate.n : d.effective.n;
     await loadText();
   }
-  // the selected version (or the draft) merged into the text the code sends now
+  // the selected version (or draft) merged into the text your code sends now
   async function loadText() {
-    const v = S.sel === "D" ? "draft" : S.sel;
-    S.text = await api(scoped(P("/view?v=" + v))).then(t => ({ ...t, sel: S.sel })).catch(() => null);
+    S.text = await api(scoped(P("/view?v=" + (S.sel === "S" ? "draft" : S.sel)))).then(t => ({ ...t, sel: S.sel })).catch(() => null);
   }
   async function refresh(poll) {
     try {
@@ -363,7 +359,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
       renderPolicy(poll);
     } catch (e) { if (e.message !== "unauthorised") console.error(e); }
   }
-  setInterval(() => { if (!S.busy && !S.editing && document.visibilityState === "visible" && !/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) refresh(true); }, 4000);
+  setInterval(() => { if (!S.busy && !S.editing && document.visibilityState === "visible" && !/^(INPUT|SELECT)$/.test(document.activeElement?.tagName)) refresh(true); }, 4000);
 
   // ---------------- overview ----------------
   function spark(arr) {
@@ -384,7 +380,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
     const rows = S.overview;
     if (!rows.length) {
       $("ov").innerHTML = `<div class="ov-in"><h1>Policies</h1><div class="start"><h2>No decisions yet</h2>
-        <span class="muted">Add one option to the client you already use. Every fixed-choice field of a structured output or forced tool call shows up here as a policy, and so do OpenAI Decisions and Jev questions.</span>
+        <span class="muted">Add one option to the client you already use. Decision calls show up here as policies: structured outputs, function calls forced to one tool, OpenAI Decisions and Jev.</span>
         <pre class="code">import * as decidus from "decidus";
 
 const openai = new OpenAI({ fetch: decidus.fetch() });
@@ -392,16 +388,16 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       return;
     }
     $("ov").innerHTML = `<div class="ov-in"><h1>Policies</h1><div class="ptable">
-      <div class="ph-row"><span>Policy</span><span>Model</span><span>Live</span><span class="num">Calls · 14 days</span><span class="num">Agreement</span><span class="num">Queue</span><span class="num">To process</span><span class="num">Accuracy</span></div>
+      <div class="ph-row"><span>Policy</span><span>Model</span><span>Live</span><span class="num">Calls · 14 days</span><span class="num">Agreement</span><span class="num">Queue</span><span class="num">To process</span><span class="num">Replay</span></div>
       ${rows.map(p => `<button type="button" class="pr" data-open="${esc(p.name)}">
         <span class="pcell"><span class="mono">${esc(p.name).replace(/\./g, ".<wbr>")}</span><span class="pi">${esc(p.instructions || "")}</span></span>
         <span class="pcell"><span class="mono" style="font-size:13px">${esc(p.model || "—")}</span><span class="pi">${esc(p.route)} · ${esc(p.kind)}</span></span>
-        <span class="pcell"><span class="mono" style="font-size:13px">${p.live ? '<i class="dot"></i> ' : ""}v${p.live}</span>${p.candidate ? `<span class="pi">v${p.candidate.n} ${esc(p.candidate.mode)} ${p.candidate.pct}%</span>` : p.overrides || p.candidates ? `<span class="pi">${[p.overrides ? `+${p.overrides} scoped` : "", p.candidates ? `${p.candidates} trying` : ""].filter(Boolean).join(" · ")}</span>` : ""}</span>
+        <span class="pcell"><span class="mono" style="font-size:13px">${p.live ? '<i class="dot"></i> ' : ""}v${p.live}</span>${p.candidate ? `<span class="pi">v${p.candidate.n} ${esc(p.candidate.mode)} ${p.candidate.pct}%</span>` : p.overrides ? `<span class="pi">+${p.overrides} scoped</span>` : ""}</span>
         <span class="calls">${spark(p.daily)}<span class="mono">${fmt(p.calls)}</span></span>
         ${agreement(p.agreement)}
         <span class="mono num ${p.queue ? "hot" : ""}">${fmt(p.queue)}</span>
         <span class="mono num">${fmt(p.unprocessed)}</span>
-        <span class="mono num">${p.replay ? `<span title="${p.replay.pass} of ${p.replay.n} decided cases on replay">${pct(p.replay.pass, p.replay.n)}</span>` : '<span class="muted">—</span>'}</span>
+        <span class="mono num">${p.replay ? `<span class="${p.replay.pass === p.replay.n ? "okc" : "badc"}">${p.replay.pass}/${p.replay.n}</span>` : '<span class="muted">—</span>'}</span>
       </button>`).join("")}</div></div>`;
   }
 
@@ -409,7 +405,7 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   const sure = c => c.confidence != null && (c.confidence >= .8 || c.confidence <= .2);
   const said = c => c.answer == null ? "no answer" : `${lab(c.answer)}${c.confidence != null ? " " + Number(c.confidence).toFixed(2) : ""}`;
   const scopeTag = c => c.scope && c.scope !== S.scope ? ` · <span class="sc">${esc(S.scope ? c.scope.slice(S.scope.length + 1) : c.scope)}</span>` : "";
-  const shadowTag = c => c.shadow_version != null ? ` · <span class="sh" title="The candidate's answer on the same call">v${esc(c.shadow_version)} → ${esc(lab(c.shadow_answer ?? "–"))}</span>` : "";
+  const shadowTag = c => c.shadow_version != null && c.shadow_answer !== c.answer ? ` · <span class="sc" title="Shadow v${esc(c.shadow_version)} diverged on this call">v${esc(c.shadow_version)}: ${esc(lab(c.shadow_answer ?? "–"))}</span>` : "";
   const rowsNow = () => S.tab === "queue" ? S.data.queue : S.tab === "calls" ? (S.calls.rows || []) : [...S.data.unprocessed, ...S.data.processed];
 
   function renderPolicy(poll) {
@@ -447,7 +443,7 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       h += `<div class="filter"><input id="cq" value="${esc(S.calls.q)}" placeholder="answer:billing  v:2  conf:<0.6  decided:no  conv_…" aria-label="Filter calls" autocomplete="off" spellcheck="false"></div><div class="rows">`;
       const rows = S.calls.rows;
       h += rows == null ? '<div class="empty">Loading…</div>' : rows.length ? rows.map(c => `<div class="row${on(c.id)}"><button class="rb" data-case="${c.id}"><div class="r-t">${esc(c.headline || "(no text)")}</div>
-        <div class="r-m">#${c.id} · ${c.decision != null ? `<span class="cat">✓ ${esc(lab(c.decision))}</span>` : `<span class="${sure(c) ? "ok" : "ans"}">${esc(said(c))}</span>`} · v${esc(c.version)}${shadowTag(c)}${scopeTag(c)} · ${c.status >= 400 ? `<span class="badc">HTTP ${esc(c.status)}</span>` : esc(c.ms) + " ms"} · ${ago(c.created_at)}</div></button></div>`).join("")
+        <div class="r-m">#${c.id} · ${c.decision != null ? `<span class="cat">✓ ${esc(lab(c.decision))}</span>` : `<span class="${sure(c) ? "ok" : "ans"}">${esc(said(c))}</span>`} · v${esc(c.version)}${scopeTag(c)} · ${c.status >= 400 ? `<span class="badc">HTTP ${esc(c.status)}</span>` : esc(c.ms) + " ms"} · ${ago(c.created_at)}</div></button></div>`).join("")
         + (S.calls.next ? '<button class="more" id="more">Older calls</button>' : "") : '<div class="empty">No calls match</div>';
       $("list").innerHTML = h + "</div>"; return;
     }
@@ -462,9 +458,9 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     h += pr.length ? Object.keys(byV).sort((a,b) => b-a).map(v => `<div class="grp"><span>v${v}</span>${+v === d.effective.n ? '<i class="dot"></i>' : ""}<span class="fill"></span><span>${byV[v].length}</span></div>` + byV[v].map(row).join("")).join("") : '<div class="empty">No versions yet</div>';
     h += "</div>";
     const n = S.pickAll ? Math.min(t.unprocessed, d.maxCases) : S.pick.size, busy = S.busy === "suggest";
-    const label = S.pickAll && t.unprocessed > d.maxCases ? `Write a draft from ${n} · disagreements first` : `Write a draft from ${n}`;
+    const label = S.pickAll && t.unprocessed > d.maxCases ? `Generate draft from ${n} · disagreements first` : `Generate draft from ${n}`;
     const obs = !d.template.ready;
-    h += `<div class="foot"><button class="primary w${busy ? " busy" : ""}" id="suggest" ${n && !S.busy && !obs ? "" : "disabled"} title="${obs ? "Still observing this scope's calls" : ""}">${busy ? '<span class="spin"></span>Writing a draft…' : label}</button></div>`;
+    h += `<div class="foot"><button class="primary w${busy ? " busy" : ""}" id="suggest" ${n && !S.busy && !obs ? "" : "disabled"}${obs ? ` title="Sampling ${d.template.seen}/${d.template.need} calls to detect static vs dynamic text"` : ""}>${busy ? '<span class="spin"></span>Generating draft…' : label}</button></div>`;
     $("list").innerHTML = h;
   }
 
@@ -483,151 +479,143 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     if (render) { renderList(); renderDetail(); if (!S.editing) renderPane(); document.querySelector(".row.on")?.scrollIntoView({ block:"nearest" }); }
   }
 
+  /** With many options (96 articles, 120 tags), a filter narrows the buttons; 1–9 pick from what's shown. */
+  const shownOpts = c => { const q = S.ofilter.trim().toLowerCase(), all = opts(c); return all.length > 12 && q ? all.filter(o => lab(o).toLowerCase().includes(q)) : all; };
+  function segHtml(c) {
+    const p = S.data.policy, locked = c.used_in != null, list = shownOpts(c);
+    if (!list.length) return '<span class="muted">No option matches</span>';
+    return p.kind === "multi" ? `<div class="seg">${list.map((o, i) => `<button class="sg${set(c.answer).includes(o) ? " mp" : ""}" data-toggle="${esc(o)}" aria-pressed="${S.multi.has(o)}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(o)}</button>`).join("")}</div>
+            ${locked ? "" : `<div class="savebar"><span class="muted">${S.multi.size ? [...S.multi].map(esc).join(", ") : "none"}</span><button class="primary" id="saveMulti">${c.decision != null && JSON.stringify([...S.multi].sort()) === c.decision ? "Saved" : "Save"} <kbd>↵</kbd></button></div>`}`
+      : `<div class="seg">${list.map((o, i) => `<button class="sg${o === c.answer ? " mp" : ""}" data-decide="${esc(o)}" aria-pressed="${c.decision === o}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(lab(o))}</button>`).join("")}</div>`;
+  }
   function renderDetail() {
     const c = S.caseView, p = S.data.policy;
     if (!c || c.policy !== p.name) { $("detail").innerHTML = '<div class="d"><div class="empty">Select a case</div></div>'; return; }
-    const locked = c.used_in != null;
+    const locked = c.used_in != null, all = opts(c);
     const ids = { scope: c.scope || undefined, trace_id: c.trace_id ?? undefined, conversation_id: c.conversation_id ?? undefined, event_id: c.event_id ?? undefined,
       metadata: Object.keys(c.metadata || {}).length ? c.metadata : undefined };
     const hasIds = Object.values(ids).some(v => v !== undefined);
-    const all = opts(c), many = all.length > 12;
-    const said = Object.entries(c.said || {}), varies = Object.entries(c.varies || {});
     $("detail").innerHTML = `<div class="ph"><span class="mono">#${c.id}</span><span class="mono muted">${esc(c.model || "")} · v${esc(c.version)}${c.scope ? " · " + esc(c.scope) : ""}</span><span class="fill"></span>${locked ? `<span class="mono muted">in v${esc(c.used_in)}</span>` : ""}</div>
       <div class="d">
-        <div class="d-meta">${esc(new Date(c.created_at).toLocaleString())} · ${esc(c.ms)} ms${c.retired ? ` · <span class="hot" title="The code had changed text this version edits; those edits were skipped">${esc(c.retired)} edits skipped</span>` : ""}</div>
-        <div class="decide"><div class="said${sure(c) ? " sure" : ""}">${c.answer == null ? "Model gave no answer" : `model → <b>${esc(lab(c.answer))}</b>${c.confidence != null ? " · " + Number(c.confidence).toFixed(2) : " · no confidence reported"}`}${c.shadow_version != null ? ` <span class="muted">· v${esc(c.shadow_version)} said ${esc(lab(c.shadow_answer ?? "nothing"))}</span>` : ""}</div>
-          ${many ? `<input class="ofilter" id="of" value="${esc(S.ofilter)}" placeholder="Filter ${all.length} options" aria-label="Filter options" autocomplete="off" spellcheck="false">` : ""}
+        <div class="d-meta">${esc(new Date(c.created_at).toLocaleString())} · ${esc(c.ms)} ms${c.retired ? ` · <span title="Conflict: your code changed text this version edits; code won">${esc(c.retired)} edit${c.retired === 1 ? "" : "s"} skipped (conflict)</span>` : ""}</div>
+        <div class="decide"><div class="said${sure(c) ? " sure" : ""}">${c.answer == null ? "Model gave no answer" : `model → <b>${esc(lab(c.answer))}</b>${c.confidence != null ? " · " + Number(c.confidence).toFixed(2) : " · no confidence reported"}`}${c.shadow_version != null ? ` <span class="muted">· v${esc(c.shadow_version)} shadow → ${esc(lab(c.shadow_answer ?? "nothing"))}</span>` : ""}</div>
+          ${all.length > 12 ? `<input class="ofilter" id="of" value="${esc(S.ofilter)}" placeholder="Filter ${all.length} options" aria-label="Filter options" autocomplete="off" spellcheck="false">` : ""}
           <div id="seg">${segHtml(c)}</div></div>
-        ${said.length ? `<section class="blk"><div class="bh">The model wrote<span class="fill"></span><span class="mono">next to its answer</span></div><div class="bb words">${said.map(([k, v]) => `<div><span class="k">${esc(k)}</span>${esc(v)}</div>`).join("")}</div></section>` : ""}
-        ${varies.length || c.about ? `<section class="blk"><div class="bh">This call's own text<span class="fill"></span><span class="mono">varies per call · never edited</span></div><div class="bb words">${varies.map(([k, v]) => `<div><span class="k">${esc(k)}</span>${esc(v)}</div>`).join("")}${c.about ? `<div><span class="k">about</span>${esc(c.about)}</div>` : ""}</div></section>` : ""}
         ${hasIds ? block("Call", '<span class="mono">from your app</span>', ids) : ""}
         ${block("Input", `<span class="mono">${c.url ? esc(new URL(c.url).pathname) + " · " : ""}v${esc(c.version)}</span>`, c.sent)}
         ${block("Output", `<span class="mono">HTTP ${esc(c.status)}</span>`, c.response)}
       </div>`;
   }
-  /** The options to decide with, filtered when there are many (96 articles, 120 categories). */
-  const shownOpts = c => { const q = S.ofilter.trim().toLowerCase(), all = opts(c); return all.length > 12 && q ? all.filter(o => lab(o).toLowerCase().includes(q)) : all; };
-  function segHtml(c) {
-    const p = S.data.policy, locked = c.used_in != null, list = shownOpts(c);
-    if (!list.length) return '<span class="muted">No option matches</span>';
-    if (p.kind === "multi") return `<div class="seg">${list.map((o, i) => `<button class="sg${set(c.answer).includes(o) ? " mp" : ""}" data-toggle="${esc(o)}" aria-pressed="${S.multi.has(o)}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(o)}</button>`).join("")}</div>
-      ${locked ? "" : `<div class="savebar"><span class="muted">${S.multi.size ? [...S.multi].map(esc).join(", ") : "none"}</span><button class="primary" id="saveMulti">${c.decision != null && JSON.stringify([...S.multi].sort()) === c.decision ? "Saved" : "Save"} <kbd>↵</kbd></button></div>`}`;
-    return `<div class="seg">${list.map((o, i) => `<button class="sg${o === c.answer ? " mp" : ""}" data-decide="${esc(o)}" aria-pressed="${c.decision === o}"${locked ? " disabled" : ""}>${i < 9 && !locked ? `<kbd>${i + 1}</kbd>` : ""}${esc(lab(o))}</button>`).join("")}</div>`;
-  }
 
-  // ---------------- policy pane: the decision's text, version by version ----------------
-  const vname = n => n === "D" ? "the draft" : "v" + n;
-  /** A part's text as units: kept (lockable), varies per call (never edited), removed, added. */
-  function unitsHtml(part, units) {
-    let h = "";
-    for (let i = 0; i < units.length;) {
-      const u = units[i];
-      if (u.dyn) {
-        let j = i, text = "";
-        while (j < units.length && units[j].dyn) { text += units[j].text + units[j].sep; j++; }
-        text = text.trim();
-        const short = text.length > 120 ? text.slice(0, 120) + "…" : text;
-        h += `<span class="dy" data-dy title="Varies per call (this is the newest call's). decidus never edits it."><span class="tag">varies</span><span class="short">${esc(short)}</span><span class="full">${esc(text)}</span></span>${esc(units[j - 1].sep)}`;
-        i = j; continue;
-      }
-      const sep = esc(u.sep);
-      if (u.kind === "add") h += `<span class="ad">${esc(u.text)}</span>${sep}`;
-      else if (u.kind === "del") h += `<span class="dl">${esc(u.text)}</span>${u.sep.includes("\n") ? sep : " "}`;
-      else if (!u.key) h += esc(u.text) + sep;
-      else h += `<span class="cl${u.locked ? " locked" : ""}">${esc(u.text)}<button class="lk" data-lock="${esc(part)}" data-key="${esc(u.key)}" data-on="${u.locked ? "" : "1"}" title="${u.locked ? "Locked: decidus won't edit this clause. Click to unlock." : "Lock: decidus won't edit this clause"}" aria-label="${u.locked ? "Unlock" : "Lock"} clause">${ICON.lock}</button></span>${sep}`;
-      i++;
-    }
-    return h || '<span class="none">(empty)</span>';
+  // ---------------- policy pane ----------------
+  // The decision's text as JSON, one line per part. A version's edits show as a diff against your code;
+  // text that varies per call is grey (never edited); click a clause to lock it.
+  function textLines(parts) {
+    let no = 0, out = "";
+    const line = (cls, mk, src, refs, attr = "") => { no++; return `<div class="ln ${cls}"${attr}><span class="no">${no}</span><span class="mk">${mk}</span><span class="src">${src}</span><span class="refs">${refs || ""}</span></div>`; };
+    out += line("", "", '<span class="p">{</span>');
+    parts.forEach((x, i) => {
+      const comma = i < parts.length - 1 ? '<span class="p">,</span>' : "";
+      const vis = x.units.filter(u => u.kind !== "del");
+      const val = vis.map((u, j) => { const t = esc(u.text) + esc(j < vis.length - 1 ? u.sep || " " : ""); return u.dyn ? `<span class="vary" title="Dynamic: varies per call, never tuned">${t}</span>` : t; }).join("");
+      out += line("", "", `  <span class="k">"${esc(x.part)}"</span><span class="p">: </span><span class="s">"${val}"</span>${comma}`, "");
+    });
+    out += line("", "", '<span class="p">}</span>');
+    return out;
   }
-
-  const dist = a => {
-    const e = Object.entries(a || {}), n = e.reduce((x, [, v]) => x + v, 0);
-    return n ? `<div class="dist">${e.sort((x, y) => y[1] - x[1]).slice(0, 4).map(([k, v]) => `<span><span>${esc(lab(k || "–"))}</span><span>${pct(v, n)}</span></span>`).join("")}</div>` : '<span class="muted">—</span>';
-  };
-  const count = a => Object.values(a || {}).reduce((x, v) => x + v, 0);
-  const acc = r => r ? `${pct(r.pass, r.n)} <span class="muted">of ${fmt(r.n)}</span>` : '<span class="muted">not replayed</span>';
-  const agreeOf = r => r.n ? `${pct(r.agree, r.n)} <span class="muted">of ${fmt(r.n)}</span>` : '<span class="muted">none yet</span>';
-
-  function candidateHtml(d) {
-    const c = d.candidate, k = d.compare, here = c.scope === S.scope;
-    const other = c.mode === "shadow" ? "canary" : "shadow";
-    let h = `<section class="cmp"><div class="bh"><span>v${c.n} · ${esc(c.mode)} ${c.pct}%</span><span class="mono">${c.mode === "shadow" ? "re-run on the side, never served" : "served to its share of calls"} · since ${ago(c.since)}${here ? "" : " · set for " + esc(c.scope || "global")}</span></div>
-      <table><thead><tr><th></th><th>v${k.live.n} live</th><th>v${c.n} ${esc(c.mode)}</th></tr></thead><tbody>
-      <tr><th>Calls</th><td>${fmt(count(k.live.answers))}</td><td>${fmt(count(k.candidate.answers))}</td></tr>
-      <tr><th>Answers</th><td>${dist(k.live.answers)}</td><td>${dist(k.candidate.answers)}</td></tr>
-      ${k.paired ? `<tr><th>Same call, different answer</th><td colspan="2">${k.paired.n ? `${pct(k.paired.differ, k.paired.n)} <span class="muted">of ${fmt(k.paired.n)} · in the queue</span>` : '<span class="muted">none yet</span>'}</td></tr>` : ""}
-      <tr><th>Reviewers agree</th><td>${agreeOf(k.live.reviewed)}</td><td>${agreeOf(k.candidate.reviewed)}</td></tr>
-      <tr><th>Replay accuracy</th><td>${acc(k.replay.live)}</td><td>${acc(k.replay.candidate)}</td></tr>
-      </tbody></table>`;
-    if (here) h += `<div class="stagebar"><button class="primary" data-stage="live" data-target="${c.n}"${S.busy ? " disabled" : ""}>Make v${c.n} live</button><span class="fill"></span>
-      <input class="pct" id="cpct" type="number" min="0.1" max="100" step="any" value="${c.pct}" aria-label="Share of calls, %"><span class="lbl">%</span>
-      <button class="ghost" data-stage="${c.mode}" data-target="${c.n}"${S.busy ? " disabled" : ""}>Update</button><button class="ghost" data-stage="${other}" data-target="${c.n}"${S.busy ? " disabled" : ""}>${other === "canary" ? "Canary" : "Shadow"} instead</button><button class="ghost" id="stop"${S.busy ? " disabled" : ""}>Stop</button></div>`;
-    return h + "</section>";
-  }
+  const dist = a => { const e = Object.entries(a || {}), n = e.reduce((x, [, v]) => x + v, 0); return n ? e.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => `${esc(lab(k || "–"))} ${pct(v, n)}`).join(", ") : "no calls yet"; };
+  const agreed = r => r.n ? `${pct(r.agree, r.n)} of ${r.n}` : "—";
 
   function renderPane() {
-    const d = S.data, p = d.policy, draft = d.draft, vs = d.versions, eff = d.effective, cand = d.candidate, T = S.text;
+    const d = S.data, sug = d.draft, vs = d.versions, eff = d.effective, cand = d.candidate, t = d.template, T = S.text;
     if (S.editing) document.querySelectorAll("#editForm textarea").forEach(x => { S.editing[x.name] = x.value; });   // keep what's typed across re-renders
-    let tabs = vs.map(v => `<button class="tab v${v.scope ? " own" : ""}" data-v="${v.n}" aria-selected="${S.sel === v.n}" title="${esc(v.scope || "global")}${v.legacy ? " · written by decidus 0.3" : ""}">${v.n === eff.n ? '<i class="dot"></i>' : ""}v${v.n}${cand?.n === v.n ? `<span class="chip">${esc(cand.mode)}</span>` : ""}</button>`).join("");
-    if (draft) tabs += `<button class="tab v sug" data-v="D" aria-selected="${S.sel === "D"}">Draft</button>`;
-    const isDraft = S.sel === "D", cur = isDraft ? draft : vs.find(v => v.n === S.sel);
-    let h = `<div class="ph"><nav class="tabs" aria-label="Versions">${tabs}</nav></div>`;
-    const where = S.scope ? esc(S.scope) : "global";
-    const runs = eff.from === S.scope ? `v${eff.n} live` : `runs v${eff.n} from ${eff.from ? esc(eff.from) : "global"}`;
-    h += `<div class="ep"><span>${esc(p.route)} · ${esc(p.field ? "field " + p.field : "question " + p.name)}</span><span><b>${where}</b> · ${runs}</span>${S.scope && d.own != null ? '<button class="linkbtn" id="inherit">Inherit instead</button>' : ""}</div>`;
+    if (S.sel === "S" && !sug) S.sel = eff.n;
+    if (S.sel !== "S" && !vs.some(v => v.n === S.sel)) S.sel = eff.n;
+    let tabs = vs.map(v => `<button class="tab v${v.scope ? " own" : ""}" data-v="${v.n}" aria-selected="${S.sel === v.n}" title="${esc(v.scope || "global")}${cand?.n === v.n ? ` · in ${cand.mode} on ${cand.pct}% of calls` : ""}">${v.n === eff.n ? '<i class="dot"></i>' : ""}v${v.n}${cand?.n === v.n ? `<span class="ct">${esc(cand.mode)}</span>` : ""}</button>`).join("");
+    if (sug) tabs += `<button class="tab v sug" data-v="S" aria-selected="${S.sel === "S"}">Draft</button>`;
+    const isSug = S.sel === "S", cur = isSug ? sug : vs.find(v => v.n === S.sel);
+    const canLive = !isSug && S.sel !== eff.n && cand?.n !== S.sel;
+    const changed = T && T.sel === S.sel && T.parts.some(x => x.units.some(u => u.kind !== "keep"));
+    let h = `<div class="ph"><nav class="tabs" aria-label="Versions">${tabs}</nav><span class="fill"></span>${T && !S.editing ? `<button class="linkbtn" id="diffBtn" title="${changed ? "Diff against the text in your code" : "Inspect the text line by line; lock lines"}">${changed ? "Diff" : "Lines"}</button><button class="linkbtn" id="copy" style="margin-left:14px" title="The text as the newest call would send it">${S.copied ? "Copied" : "Copy"}</button>` : ""}${canLive ? `<button class="linkbtn" id="rollback" style="margin-left:14px">${S.sel < eff.n ? "Roll back to" : "Deploy"} v${S.sel}${S.scope ? " here" : ""}</button>` : ""}${S.scope && d.own != null && !canLive ? `<button class="linkbtn" id="inherit" style="margin-left:14px" title="Drop this scope's override and run what ${esc(S.scope.split("/").slice(0, -1).join("/") || "global")} runs">Inherit</button>` : ""}</div>`;
     if (S.error) h += `<div class="err">${esc(S.error)}</div>`;
-    const t = d.template;
-    if (!t.ready) h += `<div class="banner obs"><span><b>Observing · ${t.seen} of ${t.need} calls${S.scope ? " in " + where : ""}.</b> decidus is learning which text your code sends every time and which varies per call (an article, a customer's options). It tunes only the first kind.</span><div class="obsbar"><i style="width:${Math.round(t.seen / t.need * 100)}%"></i></div></div>`;
-    if (d.retired) {
-      const r = d.retired;
-      h += `<div class="banner warn"><span><b>The code changed text that v${r.version} edits.</b> In the newest call ${r.ops.length === 1 ? "one of its edits" : r.ops.length + " of its edits"} no longer applied, so the code's own text went out there${r.of > 1 ? ` (${r.calls} of the last ${r.of} calls)` : ""}. The code wins until you choose otherwise.</span>
-        <ul>${r.ops.map(o => `<li>${esc(o.part)}: ${o.op === "insert" ? "added text after" : o.op === "delete" ? "removed" : "rewrote"} “${esc((o.clause ?? o.after ?? o.before ?? "").slice(0, 90))}”</li>`).join("")}</ul>
-        <button class="ghost" id="rebase"${S.busy ? " disabled" : ""}>Keep decidus's text</button></div>`;
-    }
-    if (cand && d.compare) h += candidateHtml(d);
-
+    if (!t.ready) h += `<div class="notes" title="decidus only tunes static text: what your code sends on every call">Sampling ${t.seen}/${t.need} calls${S.scope ? " in this scope" : ""} to detect static vs dynamic text. Tuning unlocks at ${t.need}.</div>`;
+    if (d.retired) h += `<div class="notes warn"><b style="color:inherit">Conflict:</b> your code changed text v${d.retired.version} edits. Code wins, ${d.retired.ops.length} edit${d.retired.ops.length === 1 ? "" : "s"} skipped. <button class="linkbtn" id="rebase"${S.busy ? " disabled" : ""} title="Re-apply v${d.retired.version}'s edits on top of your code's new text, as a new version">Rebase v${d.retired.version}</button></div>`;
     if (!T || T.sel !== S.sel) { $("policy").innerHTML = h + '<div class="empty">Loading…</div>'; return; }
 
     if (S.editing) {
       const fixed = Object.entries(T.fixed || {});
-      h += `<form class="edit" id="editForm">${Object.keys(T.edit).map(part => `<label>${esc(part)}<textarea name="${esc(part)}" rows="${Math.min(14, 2 + Math.ceil((S.editing[part] || "").length / 60))}">${esc(S.editing[part] ?? "")}</textarea></label>`).join("")}</form>`;
-      if (fixed.length) h += `<div class="legend">${fixed.map(([id, f]) => `<span>⟦${id}⟧ ${f.dyn ? "varies per call" : "locked"}: “${esc(f.text.length > 80 ? f.text.slice(0, 80) + "…" : f.text)}” · stays as is</span>`).join("")}</div>`;
-      h += `<div class="sugbar"><button class="ghost" id="editCancel">Cancel</button><button class="primary" id="editSave">Save as draft</button></div>`;
+      h += `<form class="edit" id="editForm">${Object.keys(T.edit).map(part => `<label>"${esc(part)}"<textarea name="${esc(part)}" rows="${Math.min(12, 2 + Math.ceil((S.editing[part] || "").length / 60))}">${esc(S.editing[part] ?? "")}</textarea></label>`).join("")}</form>
+        ${fixed.length ? `<div class="stat">${fixed.map(([id, f]) => `⟦${id}⟧ ${f.dyn ? "dynamic" : "locked"}, read-only`).join("<br>")}</div>` : ""}
+        <div class="sugbar"><button class="ghost" id="editCancel">Cancel</button><button class="primary" id="editSave">Save as draft</button></div>`;
       $("policy").innerHTML = h; return;
     }
 
-    if (cur.legacy) h += `<div class="banner obs"><span>Written by decidus 0.3 as option descriptions. It no longer changes calls; write a new draft.</span></div>`;
-    h += `<div class="parts">${T.parts.map(x => `<div class="part"><h3>${esc(x.part)}${x.retired.length ? `<span class="hot">${x.retired.length} skipped</span>` : ""}</h3><div class="ptext">${unitsHtml(x.part, x.units)}</div></div>`).join("") || '<div class="empty">No text yet</div>'}</div>`;
-    const notes = isDraft ? draft.notes : cur.log?.notes;
-    if (notes) h += `<div class="notes">${esc(notes)}</div>`;
-    const a = !isDraft && d.agreement[cur.n];
+    h += `<div class="code">${textLines(T.parts)}</div>`;
+    if (cur.legacy) h += `<div class="notes">Written by decidus 0.3 as option descriptions; it no longer changes calls.</div>`;
+    const a = !isSug && d.agreement[cur.n];
     if (a) h += `<div class="stat">People agreed with v${cur.n} on <b>${pct(a.agree, a.n)}</b> · ${fmt(a.n)} reviewed</div>`;
 
     const results = cur.replay, failing = results ? results.filter(r => !r.pass).length : 0;
-    const copy = `<button class="ghost" id="copy" title="The merged text as the newest call would send it">${S.copied ? "Copied" : "Copy merged text"}</button>`;
-    const edit = `<button class="ghost" id="edit"${S.busy || !t.ready ? " disabled" : ""}>Edit</button>`;
-    if (isDraft) {
-      h += `<div class="sugbar">${edit}${copy}<span class="fill"></span><button class="ghost" id="discard"${S.busy ? " disabled" : ""}>Discard</button></div>
-        <div class="stagebar"><span class="lbl">Try it on</span><input class="pct" id="pct" type="number" min="0.1" max="100" step="any" value="${S.pct}" aria-label="Share of calls, %"><span class="lbl">% of calls</span>
-          <button class="ghost" data-stage="shadow" data-target="draft"${S.busy ? " disabled" : ""} title="Re-run that share of calls with the draft on the side; never served">Shadow</button>
-          <button class="ghost" data-stage="canary" data-target="draft"${S.busy ? " disabled" : ""} title="Serve the draft to that share of calls (per conversation when there is an id)">Canary</button>
-          <span class="fill"></span><button class="primary" data-stage="live" data-target="draft"${S.busy ? " disabled" : ""}>Make live as v${d.next}${failing ? ` · ${failing} failing` : ""}</button></div>`;
-    } else {
-      const canLive = S.sel !== eff.n && cand?.n !== S.sel;
-      h += `<div class="sugbar">${S.sel === eff.n && !draft ? edit : ""}${copy}<span class="fill"></span>${canLive ? `<button class="ghost" id="rollback"${S.busy ? " disabled" : ""}>Make live${S.scope ? " here" : ""}</button>` : ""}</div>`;
+    if (isSug) {
+      h += `<div class="sugbar"><button class="ghost" id="edit"${S.busy ? " disabled" : ""}>Edit</button><span class="fill"></span><button class="ghost" id="discard"${S.busy ? " disabled" : ""}>Discard</button><button class="ghost" id="tryBtn"${S.busy ? " disabled" : ""} title="Shadow or canary on a share of traffic before deploying">Rollout…</button><button class="primary" id="accept"${S.busy ? " disabled" : ""} title="Every call runs it within 30s">Deploy v${d.next}${S.scope ? " to " + esc(S.scope) : ""}</button></div>`;
+      if (S.trying) h += `<div class="try"><select id="mode" aria-label="Rollout strategy"><option value="shadow">shadow</option><option value="canary">canary</option></select><input id="pct" type="number" min="0.1" max="100" step="any" value="10" aria-label="Traffic, %"> % traffic <button class="ghost" id="tryStart"${S.busy ? " disabled" : ""}>Start rollout</button><span class="muted">shadow mirrors traffic (not served) · canary serves it, sticky per conversationId</span></div>`;
     }
+    else if (cand && cand.n === S.sel && cand.scope === S.scope) h += `<div class="sugbar"><span class="muted" style="margin-right:auto;align-self:center;font-size:12.5px">${cand.mode === "shadow" ? `Shadow · mirroring ${cand.pct}% of traffic` : `Canary · serving ${cand.pct}% of traffic`}</span><button class="ghost" id="stop"${S.busy ? " disabled" : ""} title="End the rollout; v${eff.n} keeps serving">Abort</button><button class="primary" data-stage="live" data-target="${cand.n}"${S.busy ? " disabled" : ""} title="Deploy v${cand.n} to all traffic">Promote</button></div>`;
+    else if (S.sel === eff.n && !sug) h += `<div class="sugbar"><button class="ghost" id="edit"${S.busy || !t.ready ? " disabled" : ""}>Edit</button></div>`;
 
-    const rb = S.busy === "replay", tb = S.busy === "tune";
+    const n = d.tally.unprocessed + d.tally.processed, rb = S.busy === "replay", tb = S.busy === "tune";
     h += `<div class="replay"><div class="r-head"><div class="r-btns">
-        <button class="ghost" id="replayBtn" ${S.busy ? "disabled" : ""} title="Re-run ${vname(S.sel)} on this scope's decided cases">${rb ? '<span class="spin"></span>Replaying…' : ICON.play + "Replay"}</button>
-        ${isDraft && (failing || tb) ? `<button class="ghost tune" id="tuneBtn" ${S.busy ? "disabled" : ""}>${tb ? '<span class="spin"></span>Tuning…' : "Auto-tune the failing cases"}</button>` : ""}
-      </div><span class="r-sum">${results ? `Accuracy <b>${pct(results.length - failing, results.length)}</b> · ${results.length - failing} of ${results.length}` : "Not replayed"}</span></div>`;
+        <button class="ghost" id="replayBtn" ${!n || S.busy ? "disabled" : ""}>${rb ? '<span class="spin"></span>Replaying…' : ICON.play + "Replay"}</button>
+        ${isSug && (failing || tb) ? `<button class="ghost tune" id="tuneBtn" ${S.busy ? "disabled" : ""}>${tb ? '<span class="spin"></span>Tuning…' : "Auto-tune"}</button>` : ""}
+      </div><span class="r-sum">${!n ? "No decided cases" : results ? `<b>${pct(results.length - failing, results.length)}</b> · ${results.length - failing}/${results.length} pass` : "Not run"}</span></div>`;
     if (results?.length) h += `<div class="tiles">${results.map(r => `<button class="tile ${r.pass ? "pass" : "fail"}" data-case="${r.id}" title="#${r.id} · you: ${esc(lab(r.human))} · model: ${esc(r.model == null ? (r.error || "no answer") : lab(r.model))}">${r.id}</button>`).join("")}</div>`;
-    const log = isDraft ? draft.tune : cur.log?.tune;
-    if (log?.length) h += `<ol class="tlog">${log.map(x => `<li><span class="mono muted">${x.round}</span><span class="mono ${x.pass != null && x.pass === x.n ? "okc" : ""}">${x.pass != null ? `${x.pass}/${x.n}` : "—"}</span><span>${esc(x.note)}</span></li>`).join("")}</ol>`;
+    const log = isSug ? sug.tune : cur.log?.tune;
+    if (log?.length) h += `<ol class="tlog">${log.map(t => `<li><span class="mono muted">${t.round}</span><span class="mono ${t.pass != null && t.pass === t.n ? "okc" : ""}">${t.pass != null ? `${t.pass}/${t.n}` : "—"}</span><span>${esc(t.note)}</span></li>`).join("")}</ol>`;
     h += "</div>";
     $("policy").innerHTML = h;
   }
+
+  // ---------------- the diff: what a version changes in your code's text, one clause per line ----------------
+  function renderDiff() {
+    const d = S.data, T = S.text, isSug = S.sel === "S", cur = isSug ? d.draft : d.versions.find(v => v.n === S.sel), cand = d.candidate;
+    if (!T || !cur) return;
+    const k = d.compare;
+    const any = T.parts.some(x => x.units.some(u => u.kind !== "keep"));
+    let h = `<div class="dh"><b>${isSug ? "Draft" : "v" + cur.n}</b><span class="muted">${any ? "vs. your code" : "inspect"}${S.scope ? " · " + esc(S.scope) : ""}</span><button class="x" data-x aria-label="Close">×</button></div><div class="db">`;
+    const notes = isSug ? cur.notes : cur.log?.notes;
+    if (notes && any) h += `<div class="dnote">${esc(notes)}</div>`;
+    if (cand && k && cand.n === cur.n) h += `<div class="dlive">${esc(cand.mode)} · ${cand.pct}% traffic · since ${ago(cand.since)}<br>v${k.live.n} answers: ${dist(k.live.answers)}<br>v${cand.n} answers: ${dist(k.candidate.answers)}${k.paired ? `<br>divergence: ${k.paired.differ}/${k.paired.n} calls` : ""}${k.live.reviewed.n || k.candidate.reviewed.n ? `<br>human agreement: v${k.live.n} ${agreed(k.live.reviewed)}, v${cand.n} ${agreed(k.candidate.reviewed)}` : ""}</div>`;
+    const row = (part, u) => {
+      const cls = u.kind === "add" ? "add" : u.kind === "del" ? "cut" : u.dyn ? "var" : "";
+      const lk = u.kind === "keep" && u.key && !u.dyn ? `<button class="lk${u.locked ? " on" : ""}" data-lock="${esc(part)}" data-key="${esc(u.key)}" data-on="${u.locked ? "" : "1"}" title="${u.locked ? "Locked: never tuned. Click to unlock." : "Lock: never tune this line"}" aria-label="${u.locked ? "Unlock" : "Lock"} line">${ICON.lock}</button>` : "<span></span>";
+      const share = u.kind !== "add" && u.share != null ? `<span class="c" title="Sent in this share of recent calls">${Math.round(u.share * 100)}%</span>` : "<span></span>";
+      return `<div class="dl ${cls}"${u.dyn ? ' title="Dynamic: varies per call, never tuned"' : ""}><span class="m">${u.kind === "add" ? "+" : u.kind === "del" ? "−" : ""}</span><span class="t">${esc(u.text)}</span>${share}${lk}</div>`;
+    };
+    for (const x of T.parts) {
+      const rows = x.units.filter(u => u.key || u.kind === "add"), changed = rows.some(u => u.kind !== "keep");
+      const refs = (cur.because?.[x.part] || []).map(id => `<button class="ref" data-case="${id}">#${id}</button>`).join("");
+      h += `<div class="dpart"><h4>${esc(x.part)}${changed || !any ? "" : '<span class="muted">unchanged</span>'}${changed && refs ? `<span class="refs" title="Decided cases behind this change">${refs}</span>` : ""}</h4>`;
+      // changes with two lines of context; the rest folds away until clicked (nothing folds when nothing changed)
+      const near = rows.map((_, i) => !any || rows.slice(Math.max(0, i - 2), i + 3).some(r => r.kind !== "keep"));
+      for (let i = 0; i < rows.length;) {
+        if (!near[i] && !S.gaps.has(x.part)) {
+          let j = i; while (j < rows.length && !near[j]) j++;
+          h += `<div class="dl gap" data-gap="${esc(x.part)}"><span class="m">⋯</span><span class="t">${j - i} unchanged line${j - i > 1 ? "s" : ""}</span><span></span><span></span></div>`;
+          i = j; continue;
+        }
+        h += row(x.part, rows[i]); i++;
+      }
+      h += "</div>";
+    }
+    h += `<div class="dfoot">grey = dynamic (varies per call), never tuned · % = share of recent calls that send the line · lock a line to freeze it</div></div>`;
+    $("dlg").innerHTML = h;
+  }
+  async function openDiff() {
+    if (S.text?.sel !== S.sel) await loadText();
+    S.gaps.clear(); renderDiff();
+    if (!$("dlg").open) $("dlg").showModal();
+  }
+  $("dlg").addEventListener("click", e => { if (e.target === $("dlg")) $("dlg").close(); });
 
   // ---------------- actions ----------------
   async function act(kind, fn) {
@@ -636,10 +624,11 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     S.busy = null;
     await load();
     renderPolicy();
+    if ($("dlg").open) renderDiff();
   }
 
   const opts = c => (c.options?.length ? c.options : S.data.policy.options);
-  const toggle = o => { S.multi.has(o) ? S.multi.delete(o) : S.multi.add(o); if ($("seg") && S.caseView) $("seg").innerHTML = segHtml(S.caseView); };
+  const toggle = o => { S.multi.has(o) ? S.multi.delete(o) : S.multi.add(o); if ($("seg")) $("seg").innerHTML = segHtml(S.caseView); };
 
   async function decideCur(value) {
     const id = S.cur, before = rowsNow().map(c => c.id), at = before.indexOf(id);
@@ -658,11 +647,6 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     S.editing = { ...S.text.edit }; S.editSample = S.text.sample; S.error = null; renderPane();
     document.querySelector("#editForm textarea")?.focus();
   }
-  function mergedText() {
-    const m = Object.entries(S.text?.merged || {});
-    return m.length === 1 ? m[0][1] : m.map(([part, text]) => `## ${part}\n\n${text}`).join("\n\n");
-  }
-  const share = () => Math.max(0.1, Math.min(100, Number($("pct")?.value) || 10));
 
   document.addEventListener("change", e => {
     const ck = e.target.closest("[data-pick]");
@@ -676,7 +660,6 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   let typing;
   document.addEventListener("input", e => {
     if (e.target.id === "of") { S.ofilter = e.target.value; if (S.caseView) $("seg").innerHTML = segHtml(S.caseView); return; }
-    if (e.target.id === "pct") { S.pct = share(); return; }
     if (e.target.id !== "cq") return;
     clearTimeout(typing);
     typing = setTimeout(async () => {
@@ -704,33 +687,39 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     const tg = t.closest("[data-toggle]");
     if (tg && !tg.disabled) return toggle(tg.dataset.toggle);
     if (t.closest("#saveMulti")) return decideCur([...S.multi]);
-    const cs = t.closest("[data-case]"); if (cs) { await open(+cs.dataset.case); return; }
+    const cs = t.closest("[data-case]"); if (cs) { if ($("dlg").open) $("dlg").close(); await open(+cs.dataset.case); return; }
     if (t.closest("#pickAll")) { S.pickAll = true; renderList(); return; }
-    const v = t.closest("[data-v]"); if (v) { S.sel = v.dataset.v === "D" ? "D" : +v.dataset.v; S.editing = null; S.copied = false; renderPane(); await loadText(); renderPane(); return; }
-    const dy = t.closest("[data-dy]"); if (dy) { dy.classList.toggle("open"); return; }
+    const v = t.closest("[data-v]"); if (v) { S.sel = v.dataset.v === "S" ? "S" : +v.dataset.v; S.editing = null; S.trying = false; renderPane(); await loadText(); renderPane(); return; }
+    if (t.closest("[data-x]")) { $("dlg").close(); return; }
+    const gp = t.closest("[data-gap]"); if (gp) { S.gaps.add(gp.dataset.gap); renderDiff(); return; }
     const lk = t.closest("[data-lock]");
     if (lk) return act("lock", () => post("lock", { part: lk.dataset.lock, key: lk.dataset.key, locked: !!lk.dataset.on }));
+    if (t.closest("#diffBtn")) return openDiff();
+    if (t.closest("#copy")) {
+      const m = Object.entries(S.text?.merged || {});
+      try { await navigator.clipboard.writeText(m.length === 1 ? m[0][1] : m.map(([k, x]) => `## ${k}\n\n${x}`).join("\n\n")); S.copied = true; } catch { S.error = "The browser didn't allow copying here"; }
+      renderPane(); setTimeout(() => { S.copied = false; if (!S.editing) renderPane(); }, 1500); return;
+    }
     if (t.closest("#suggest")) return act("suggest", async () => {
-      await post("suggest", S.pickAll ? { all: true } : { cases: [...S.pick] }); S.pick.clear(); S.pickAll = false; S.sel = "D";
+      await post("suggest", S.pickAll ? { all: true } : { cases: [...S.pick] }); S.pick.clear(); S.pickAll = false; S.sel = "S"; S.trying = false;
     });
     if (t.closest("#edit")) return startEdit();
     if (t.closest("#editCancel")) { S.editing = null; renderPane(); return; }
     if (t.closest("#editSave")) {
       const parts = Object.fromEntries([...document.querySelectorAll("#editForm textarea")].map(x => [x.name, x.value]));
       S.editing = null;
-      return act("edit", async () => { const s = await post("edit", { parts, sample: S.editSample }); if (s) S.sel = "D"; });
+      return act("edit", async () => { const s = await post("edit", { parts, sample: S.editSample }); if (s) S.sel = "S"; });
     }
-    if (t.closest("#copy")) {
-      try { await navigator.clipboard.writeText(mergedText()); S.copied = true; } catch { S.error = "The browser didn't allow copying here"; }
-      renderPane(); setTimeout(() => { S.copied = false; if (!S.editing) renderPane(); }, 1500); return;
-    }
-    if (t.closest("#replayBtn")) return act("replay", () => post("replay", { target: S.sel === "D" ? "draft" : S.sel }));
+    if (t.closest("#replayBtn")) return act("replay", () => post("replay", { target: S.sel === "S" ? "draft" : S.sel }));
     if (t.closest("#tuneBtn")) return act("tune", () => post("tune"));
-    const st = t.closest("[data-stage]");
-    if (st) {
-      const fromDraft = st.dataset.target === "draft", pct = fromDraft ? share() : Math.max(0.1, Math.min(100, Number($("cpct")?.value) || 10));
-      return act("stage", async () => { const r = await post("stage", { mode: st.dataset.stage, pct, target: fromDraft ? "draft" : +st.dataset.target }); if (fromDraft || st.dataset.stage === "live") S.sel = r.n; });
+    if (t.closest("#accept")) return act("accept", async () => { const r = await post("stage", { mode: "live", target: "draft" }); S.sel = r.n; });
+    if (t.closest("#tryBtn")) { S.trying = !S.trying; renderPane(); return; }
+    if (t.closest("#tryStart")) {
+      const mode = $("mode").value, pct = Math.max(0.1, Math.min(100, Number($("pct").value) || 10));
+      return act("stage", async () => { const r = await post("stage", { mode, pct, target: "draft" }); S.sel = r.n; S.trying = false; });
     }
+    const stg = t.closest("[data-stage]");
+    if (stg) return act("stage", async () => { const r = await post("stage", { mode: stg.dataset.stage, target: +stg.dataset.target }); S.sel = r.n; });
     if (t.closest("#stop")) return act("stop", () => post("stop"));
     if (t.closest("#rebase")) return act("rebase", async () => { const r = await post("rebase"); S.sel = r.live; });
     if (t.closest("#discard")) return act("discard", async () => { await post("discard"); S.sel = null; });
@@ -740,7 +729,7 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
 
   // j/k move · 1–9 decide · Enter agrees with the model · x picks · / filters calls
   document.addEventListener("keydown", e => {
-    if (S.view !== "policy" || !S.data || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (S.view !== "policy" || !S.data || e.metaKey || e.ctrlKey || e.altKey || $("dlg").open) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { if (e.key === "Escape") e.target.blur(); return; }
     const list = rowsNow(), i = list.findIndex(c => c.id === S.cur);
     const c = S.caseView, free = c && c.policy === S.data.policy.name && c.used_in == null;

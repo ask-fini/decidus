@@ -47,17 +47,17 @@ A **decision** picks from a fixed set of answers: which team should handle a con
 
 decidus connects the answers you review to the text that runs next:
 
-1. **Review real cases.** Open a case in **Queue**, inspect its input and output, and choose the right answer. Tick several options for a multi-select decision, or press ✓ to agree with the model. The model's own free text, such as a `reasoning` field, shows next to its answer.
-2. **Write a draft.** In **Decided**, select reviewed cases and click **Write a draft**. A model rewrites the decision's text from those cases, simplifying as it goes. You get a diff against what your code sends, with each change linked to the cases behind it. Use **Edit** to write it yourself.
+1. **Review real cases.** Open a case in **Queue**, inspect its input and output, and choose the right answer. Tick several options for a multi-select decision, or press ✓ to agree with the model. The model's own free text, such as a `reasoning` field, is in the output and goes to the writer with each case.
+2. **Generate a draft.** In **Decided**, select reviewed cases and click **Generate draft**. A model rewrites the decision's text from those cases, simplifying as it goes. Click **Diff** to see what it changes in the text your code sends, line by line, with the cases behind each change. Use **Edit** to write it yourself.
 3. **Replay for accuracy.** decidus sends the scope's decided cases (up to 300) to their recorded endpoint with the draft text and compares each result with the reviewer's answer: for example, **91% · 219 of 240**. Failing cases are a warning, never a block. **Auto-tune** revises the draft for cases that still fail, for up to three rounds.
-4. **Try it on live traffic.** Choose a share of calls:
-   - **Shadow** re-runs that share with the draft on the side and records both answers. Calls where they disagree go to the queue. Your app always gets the live answer.
-   - **Canary** serves the draft to that share. With a `conversationId`, a whole conversation stays on one version; otherwise each call is drawn at random.
+4. **Roll it out.** Click **Rollout…**, pick a strategy and a share of traffic:
+   - **Shadow** mirrors that share: the server re-runs those calls with the draft and records both answers. Calls where they diverge go to the queue. Your app always gets the live answer.
+   - **Canary** serves the draft to that share, sticky per `conversationId` (random per call without one).
 
-   A comparison shows each version's answer distribution, how often reviewers agreed with each, its replay accuracy and, for shadow, how often the two disagreed on the same call.
-5. **Put it live.** Within 30 seconds, `decidus.fetch()` applies the new version to matching requests in every process. To roll back, open an older version's tab and make it live again.
+   **Diff** on the rollout's tab shows each version's answer distribution, divergence and human agreement. Then **Promote** or **Abort**.
+5. **Deploy.** **Deploy** (or **Promote**) ships the version: within 30 seconds, `decidus.fetch()` applies it to matching requests in every process. To roll back, open an older version's tab and click **Roll back**.
 
-**Copy merged text** gives you any version as your newest call would send it, for example to move it into your code.
+**Copy** gives you any version as your newest call would send it, for example to move it into your code.
 
 ### What decidus may change
 
@@ -71,15 +71,15 @@ Objects such as an article card, arrays such as examples, option values, tool na
 
 ### Text that varies per call
 
-Much of a decision's text is built per call: an article, a customer's rule, a company's tag descriptions. decidus tells the two kinds apart by itself. For its first **20 calls in a scope** it only observes. After that, a clause is **fixed** when nearly every recent call in the scope sends it, and only fixed text is tuned. Text that varies shows greyed with a **varies** tag; reviewers and the writer see it as each case's context.
+Much of a decision's text is built per call: an article, a customer's rule, a company's tag descriptions. decidus tells the two kinds apart by itself. For its first **20 calls in a scope** it only samples. After that, a clause is **static** when nearly every recent call in the scope sends it, and only static text is tuned. **Dynamic** text, which varies per call, shows in grey; the writer sees it as each case's context.
 
-This is per scope. A company's tag descriptions vary across companies, so the global policy leaves them alone, but in that company's scope they are fixed and tunable.
+This is per scope. A company's tag descriptions vary across companies, so they are dynamic for the global policy, but static and tunable in that company's scope.
 
-To keep a fixed clause exactly as your code writes it, hover it and click the lock.
+To freeze a static clause, open **Diff** (or **Lines**) above the text, hover the line and click the lock.
 
 ### When your code changes the text
 
-Each call merges the live version into what your code sends now. A clause your code adds or rewrites elsewhere goes out as is, next to decidus's edits. If your code changes a clause that the version also edits, **your code wins**: that edit is skipped, and the policy shows a warning listing what no longer applies. Click **Keep decidus's text** to carry the version's edits over to your new text as a new live version.
+Each call merges the live version into what your code sends now. A clause your code adds or rewrites elsewhere goes out as is, next to decidus's edits. If your code changes a clause that the version also edits, that's a **conflict** and **your code wins**: the edit is skipped and the policy shows a warning. Click **Rebase** to re-apply the version's edits on top of your new text, as a new live version.
 
 ## What counts as a decision
 
@@ -130,7 +130,7 @@ await decidus.trace(
 );
 ```
 
-Each rule then has its own policy, so its text is fixed and tunable instead of varying from call to call.
+Each rule then has its own policy, so its text is static and tunable instead of dynamic.
 
 ## Use your existing provider, gateway and SDK
 
@@ -300,7 +300,7 @@ Records that cannot be delivered are dropped.
 | `DECIDUS_DB` or `--db` | `~/.decidus/decidus.db` | Database location |
 | `PORT` or `--port` | `7700` | Server port |
 | `DECIDUS_SUGGEST_MODEL` | `openai/gpt-6.1-sol`, otherwise a provider with a key set | Model that writes drafts |
-| `DECIDUS_OBSERVE` | `20` | Calls a scope needs before decidus tells fixed text from varying text and may tune it |
+| `DECIDUS_OBSERVE` | `20` | Calls sampled per scope to detect static vs dynamic text before tuning starts |
 | `DECIDUS_WARMUP` | `20` | Initial calls per policy and scope eligible for review |
 | `DECIDUS_SAMPLE_RATE` | `0.1` | Review sample rate after warmup |
 | `DECIDUS_QUEUE_SIZE` | `50` | Calls shown in the queue at a time |

@@ -16,8 +16,14 @@ export interface Clause {
   locked: boolean;
   /** The run of non-editable text this clause belongs to, shown as ⟦fixed⟧ to the writer. */
   fixed: number | null;
+  /** Share of the observed calls with this part that send this clause, 0..1. */
+  share: number;
 }
-export interface PartT { part: string; code: string; clauses: Clause[]; static: string[] }
+/**
+ * `n`: observed calls that have this part. `stable`: static clauses the newest calls still send;
+ * a static clause they all lack was just changed by the code.
+ */
+export interface PartT { part: string; code: string; clauses: Clause[]; static: string[]; stable: string[]; n: number }
 export interface Template {
   /** Enough calls seen to tell static from dynamic. */
   ready: boolean; seen: number; need: number;
@@ -28,11 +34,13 @@ export interface Template {
 
 /** A clause is static when at least this share of the calls that have its part have it. */
 const SHARE = 0.8;
+/** How many of the newest calls show what the code sends now. */
+const RECENT = 3;
 
 /** `pin`: show the text of this call instead of the newest one (an edit is saved against the call it was made on). */
 export function build(samples: { id: number; spec: string | null; url: string; request: any }[], policy: string,
   locks: Record<string, string[]>, need: number, pin?: number): Template {
-  const counts = new Map<string, { n: number; keys: Map<string, number> }>();
+  const counts = new Map<string, { n: number; keys: Map<string, number>; recent: Set<string> }>();
   let latest: { id: number; parts: Record<string, string> } | null = null;
   for (const s of samples) {
     const route = s.url ? routeOf(new URL(s.url).pathname) : null;
@@ -40,9 +48,12 @@ export function build(samples: { id: number; spec: string | null; url: string; r
     if (!parts) continue;
     if (pin == null || s.id === pin) latest ??= { id: s.id, parts };
     for (const [part, text] of Object.entries(parts)) {
-      const c = counts.get(part) ?? counts.set(part, { n: 0, keys: new Map() }).get(part)!;
+      const c = counts.get(part) ?? counts.set(part, { n: 0, keys: new Map(), recent: new Set() }).get(part)!;
       c.n++;
-      for (const k of new Set(split(text).map(norm).filter(Boolean))) c.keys.set(k, (c.keys.get(k) ?? 0) + 1);
+      for (const k of new Set(split(text).map(norm).filter(Boolean))) {
+        c.keys.set(k, (c.keys.get(k) ?? 0) + 1);
+        if (c.n <= RECENT) c.recent.add(k);
+      }
     }
   }
   let run = 0;
@@ -53,7 +64,8 @@ export function build(samples: { id: number; spec: string | null; url: string; r
     let prevFixed = false;
     const clauses = split(code).map(t => {
       const key = norm(t);
-      const cl: Clause = { text: t, key, dyn: !!key && !isStatic.has(key), locked: !!key && isStatic.has(key) && locked.has(key), fixed: null };
+      const cl: Clause = { text: t, key, dyn: !!key && !isStatic.has(key), locked: !!key && isStatic.has(key) && locked.has(key), fixed: null,
+        share: key ? (c.keys.get(key) ?? 0) / Math.max(1, c.n) : 0 };
       if (key) {
         const f = cl.dyn || cl.locked;
         if (f) cl.fixed = prevFixed ? run : ++run;
@@ -61,7 +73,7 @@ export function build(samples: { id: number; spec: string | null; url: string; r
       }
       return cl;
     });
-    return { part, code, clauses, static: statics };
+    return { part, code, clauses, static: statics, stable: statics.filter(k => c.recent.has(k)), n: c.n };
   });
   return { ready: samples.length >= need, seen: samples.length, need, parts, sample: latest?.id ?? null };
 }
@@ -91,9 +103,9 @@ export const slots = (p: PartT): Slot[] => p.clauses.map(c => ({ key: c.key, fix
 /** Per part, the static clauses of the code's text: what a version's edits were written against. */
 export const staticKeys = (t: Template) => Object.fromEntries(t.parts.map(p => [p.part, p.clauses.filter(c => c.key && !c.dyn).map(c => c.key)]));
 
-export interface ViewUnit { text: string; sep: string; kind: "keep" | "del" | "add"; dyn?: boolean; locked?: boolean; key?: string }
+export interface ViewUnit { text: string; sep: string; kind: "keep" | "del" | "add"; dyn?: boolean; locked?: boolean; key?: string; share?: number }
 export interface View {
-  parts: { part: string; units: ViewUnit[]; retired: Op[] }[];
+  parts: { part: string; n: number; units: ViewUnit[]; retired: Op[] }[];
   /** The text as sent in the newest call, per part. */
   merged: Record<string, string>;
   /** The same with fixed runs as ⟦n⟧ markers: what people and the writer edit. */
@@ -109,12 +121,13 @@ export function view(t: Template, ops: Doc): View {
     const w = weave(p.code, ops[p.part] ?? []);
     const units: ViewUnit[] = w.units.map(u => {
       const c = u.i != null ? p.clauses[u.i] : null;
-      return { text: u.text, sep: u.sep, kind: u.kind, ...(c?.key ? { key: c.key } : {}), ...(c?.dyn && u.kind !== "add" ? { dyn: true } : {}), ...(c?.locked && u.kind !== "add" ? { locked: true } : {}) };
+      return { text: u.text, sep: u.sep, kind: u.kind, ...(c?.key ? { key: c.key, share: Math.round(c.share * 100) / 100 } : {}),
+        ...(c?.dyn && u.kind !== "add" ? { dyn: true } : {}), ...(c?.locked && u.kind !== "add" ? { locked: true } : {}) };
     });
     // edits whose clause the newest call lacks; a clause nearly every call sends is no code change
-    const stable = new Set(p.static);
+    const stable = new Set(p.stable);
     const gone = w.retired.map(i => ops[p.part][i]).filter(o => !stable.has((o.op === "insert" ? o.after ?? o.before : o.clause) ?? ""));
-    out.parts.push({ part: p.part, units, retired: gone });
+    out.parts.push({ part: p.part, n: p.n, units, retired: gone });
     out.merged[p.part] = join(w.units, p.code);
     // the edit text: fixed runs collapse into their marker, even where a version edited a clause that is fixed now
     const pieces: { text: string; sep: string }[] = [];
