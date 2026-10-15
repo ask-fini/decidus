@@ -7,11 +7,11 @@ Turn the decisions you review into the next policy you ship.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-loop-light.gif">
-    <img src="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-loop-dark.gif" width="720" alt="A person corrects the model on a call; a model rewrites the policy as a diff; replay shows 3 failing cases; auto-tune rewords until all pass; accept puts v2 live">
+    <img src="https://raw.githubusercontent.com/ask-fini/decidus/main/docs/decidus-loop-dark.gif" width="720" alt="A person corrects the model on a call; a model rewrites the decision's text as a diff; replay shows failing cases; auto-tune rewords until all pass; the new version goes live">
   </picture>
 </p>
 
-decidus records your model's choices and turns reviewed cases into proposed policy changes. Inspect the diff, replay those cases, and put the version you choose live without changing application code. One fetch wrapper connects to the SDK you already use.
+decidus records your model's choices and turns reviewed cases into a draft of the decision's text. Inspect the diff, replay it for an accuracy score, try it on a share of live traffic, and put it live without changing application code. One fetch wrapper connects to the SDK you already use.
 
 Works with structured outputs and forced tool calls on OpenAI, Anthropic and Gemini, directly or through gateways such as LiteLLM and OpenRouter. Also supports the OpenAI Decisions API and TypeSafe Jev.
 
@@ -37,26 +37,49 @@ const openai = new OpenAI({ fetch: decidus.fetch() });
 
 Make a supported decision call, then open [localhost:7700](http://localhost:7700). **Calls** shows your recorded decisions; **Queue** brings forward cases to review.
 
-decidus discovers policies from your schema on the first call. There is nothing to register. The initial version, **v0**, is your code exactly as written. **Policy wording stays as written until you accept an update.**
+decidus discovers policies from your schema on the first call. There is nothing to register. The initial version, **v0**, is your code exactly as written. **Your text goes out as written until you put a version live.**
 
-To generate suggestions and replay cases, add the server's [provider or gateway keys](#keys-for-suggestions-and-replay).
+To write drafts, replay and shadow, add the server's [provider or gateway keys](#keys-for-drafts-replay-and-shadow).
 
 ## The policy loop
 
-A **decision** picks from a fixed set of answers: which team should handle a conversation, which tags apply, or whether a refund needs approval. A **policy** is the wording that guides that choice.
+A **decision** picks from a fixed set of answers: which team should handle a conversation, which tags apply, or whether a refund needs approval. Its **policy** is the decision's own text: the field's description, the question's instructions, each criterion. Prompts like these tend to grow by appending for years; decidus helps you rewrite and simplify them, backed by cases people decided.
 
-decidus connects the answers you review to the policy that runs next:
+decidus connects the answers you review to the text that runs next:
 
-1. **Review real cases.** Open a case in **Queue**, inspect its input and output, and choose the right answer. Tick several options for a multi-select decision, or press ✓ to agree with the model.
-2. **Suggest a change.** In **Decided**, select reviewed cases and click **Suggest policy**. A model proposes a description for each option. You get a diff against the live policy, with each change linked to the cases behind it.
-3. **Replay before accepting.** decidus sends each selected case to its recorded endpoint with the draft wording and compares the result with your answer. **Auto-tune** can revise wording for cases that still fail, for up to three rounds.
-4. **Put it live.** Click **Accept**. Within 30 seconds, `decidus.fetch()` applies the new wording to matching requests in every process. No application code change is needed. To roll back, open an older version's tab and make it live again.
+1. **Review real cases.** Open a case in **Queue**, inspect its input and output, and choose the right answer. Tick several options for a multi-select decision, or press ✓ to agree with the model. The model's own free text, such as a `reasoning` field, shows next to its answer.
+2. **Write a draft.** In **Decided**, select reviewed cases and click **Write a draft**. A model rewrites the decision's text from those cases, simplifying as it goes. You get a diff against what your code sends, with each change linked to the cases behind it. Use **Edit** to write it yourself.
+3. **Replay for accuracy.** decidus sends the scope's decided cases (up to 300) to their recorded endpoint with the draft text and compares each result with the reviewer's answer: for example, **91% · 219 of 240**. Failing cases are a warning, never a block. **Auto-tune** revises the draft for cases that still fail, for up to three rounds.
+4. **Try it on live traffic.** Choose a share of calls:
+   - **Shadow** re-runs that share with the draft on the side and records both answers. Calls where they disagree go to the queue. Your app always gets the live answer.
+   - **Canary** serves the draft to that share. With a `conversationId`, a whole conversation stays on one version; otherwise each call is drawn at random.
 
-Use **Edit** to write the change yourself, on a suggestion or the live version. Replay your edit against the same cases before you accept it.
+   A comparison shows each version's answer distribution, how often reviewers agreed with each, its replay accuracy and, for shadow, how often the two disagreed on the same call.
+5. **Put it live.** Within 30 seconds, `decidus.fetch()` applies the new version to matching requests in every process. To roll back, open an older version's tab and make it live again.
 
-**Select all** uses up to 100 reviewed cases in the current scope, prioritizing disagreements with the model. The suggestion is written from, and replayed against, those same cases.
+**Copy merged text** gives you any version as your newest call would send it, for example to move it into your code.
 
-Policy updates change only text: a decision field's `description`, each Decisions choice's `description`, or a Jev question's `criteria`. Your options, tool names, schema structure and parsing code stay under your control.
+### What decidus may change
+
+A version is a set of edits to the decision's text, clause by clause, against what your code sends. Text means every string that belongs to the decision:
+
+- A schema field's `description`, and its `items.description` for a multi-select.
+- A Jev question's `instructions` (or each string inside an `instructions` object) and each string criterion.
+- An OpenAI Decisions question's `instructions` and each choice's or level's `description`.
+
+Objects such as an article card, arrays such as examples, option values, tool names and the schema's structure are never written.
+
+### Text that varies per call
+
+Much of a decision's text is built per call: an article, a customer's rule, a company's tag descriptions. decidus tells the two kinds apart by itself. For its first **20 calls in a scope** it only observes. After that, a clause is **fixed** when nearly every recent call in the scope sends it, and only fixed text is tuned. Text that varies shows greyed with a **varies** tag; reviewers and the writer see it as each case's context.
+
+This is per scope. A company's tag descriptions vary across companies, so the global policy leaves them alone, but in that company's scope they are fixed and tunable.
+
+To keep a fixed clause exactly as your code writes it, hover it and click the lock.
+
+### When your code changes the text
+
+Each call merges the live version into what your code sends now. A clause your code adds or rewrites elsewhere goes out as is, next to decidus's edits. If your code changes a clause that the version also edits, **your code wins**: that edit is skipped, and the policy shows a warning listing what no longer applies. Click **Keep decidus's text** to carry the version's edits over to your new text as a new live version.
 
 ## What counts as a decision
 
@@ -78,11 +101,11 @@ Supported fields include:
 
 decidus finds these fields in nested objects and through `$ref`s. This covers schema shapes produced by Zod, Pydantic, `zodResponseFormat`, Vercel AI SDK's `generateObject` and LangChain's `withStructuredOutput`. Fields inside arrays of objects, such as a label for each extracted item, are not supported yet.
 
-Free-text fields beside a decision, such as `reasoning`, are left alone. Chat, free text, embeddings and other calls pass through unchanged. Streamed decision calls receive the live policy, but are not recorded yet.
+Free-text fields beside a decision, such as `reasoning`, are recorded and shown to reviewers and the writer, but never tuned. Chat, generation-only structured outputs, embeddings and other calls without a fixed-choice field pass through unchanged and are not recorded. Streamed decision calls receive the live policy, but are not recorded yet.
 
 ### Different options, one policy
 
-Each call keeps its own options. Customers with different tags or rules can share a policy; its version only describes the options available in that call. Add or remove an option in your code and the policy follows.
+Each call keeps its own options. Customers with different tags or rules can share a policy: their option text varies per call, so the shared version leaves it alone and each customer's scope can tune its own. Add or remove an option in your code and the policy follows.
 
 ### Rename or skip a policy
 
@@ -97,6 +120,17 @@ decidus.fetch({
   },
 });
 ```
+
+When a generated key says nothing stable, such as a guardrail question called `rule_1` whose rule differs per customer, name it where you build the call. Use an ID that's stable for that rule, such as its database UUID:
+
+```ts
+await decidus.trace(
+  { names: { rule_1: `guardrail_${rule.id}` } },
+  () => jev.systemOne({ state, questions: { rule_1: guardrail(rule) } }),
+);
+```
+
+Each rule then has its own policy, so its text is fixed and tunable instead of varying from call to call.
 
 ## Use your existing provider, gateway and SDK
 
@@ -168,7 +202,7 @@ await decidus.trace(
 
 Scopes are paths. A call uses the version set for its exact scope, then its parent, then the global policy. For example, `acme/support-bot` inherits from `acme` until you accept a version for that bot. A new company starts with the global policy.
 
-In the UI, choose a scope next to the policy name. The queue, reviewed decisions and calls narrow to that scope. **Suggest**, **Edit** and **Accept** use its cases and create a version for that scope only. Choose **Inherit instead** to remove its override and follow the parent again.
+In the UI, choose a scope next to the policy name. The queue, reviewed decisions and calls narrow to that scope. Drafts, replays, shadow, canary and live use its cases and create a version for that scope only. Choose **Inherit instead** to remove its override and follow the parent again.
 
 A client can also carry a fixed scope: `decidus.fetch({ scope: "acme" })`.
 
@@ -193,23 +227,23 @@ You can also pass the scope and IDs through your SDK's extra headers: `x-decidus
 
 ## How it runs
 
-`decidus.fetch()` runs in your app's process. It applies the live policy text, sends the request to your provider or gateway, and copies the request and response to the decidus server in the background. Your app's provider keys are never sent to decidus.
+`decidus.fetch()` runs in your app's process. It merges the live version into the decision's text, sends the request to your provider or gateway, and copies the request (as your code wrote it) and the response to the decidus server in the background. Your app's provider keys are never sent to decidus.
 
 The server serves the UI and stores calls, the queue and policy versions in one SQLite database.
 
-### Keys for suggestions and replay
+### Keys for drafts, replay and shadow
 
 Set keys in the server's environment:
 
 | Task | Server configuration |
 | --- | --- |
-| Write suggestions | At least one of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` |
-| Replay direct provider calls | The key for each provider your policies call: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` or `TYPESAFE_API_KEY` |
-| Replay gateway calls | `DECIDUS_GATEWAY_URL`, matching the base URL your app uses, and `DECIDUS_GATEWAY_KEY` |
+| Write drafts | At least one of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` |
+| Replay and shadow, direct provider calls | The key for each provider your policies call: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` or `TYPESAFE_API_KEY` |
+| Replay and shadow, gateway calls | `DECIDUS_GATEWAY_URL`, matching the base URL your app uses, and `DECIDUS_GATEWAY_KEY` |
 
-Replay sends the recorded call to the same endpoint with the draft policy wording. Give decidus its own gateway key with a budget so replay usage is tracked separately and the key can be revoked independently.
+Replay and shadow send the recorded call to the same endpoint with the candidate's text. Give decidus its own gateway key with a budget so this usage is tracked separately and the key can be revoked independently.
 
-OpenAI is preferred for suggestions when several keys are set. To choose a model explicitly, set `DECIDUS_SUGGEST_MODEL=provider/model`, for example:
+OpenAI is preferred for writing drafts when several keys are set. To choose a model explicitly, set `DECIDUS_SUGGEST_MODEL=provider/model`, for example:
 
 ```sh
 DECIDUS_SUGGEST_MODEL=openai/gpt-6.1-sol
@@ -240,7 +274,7 @@ DECIDUS_BASE_URL=https://decidus.internal.example.com
 DECIDUS_API_KEY=your-shared-key
 ```
 
-The UI asks for the shared key once. Also pass the server the provider or gateway keys it needs for suggestions and replay.
+The UI asks for the shared key once. Also pass the server the provider or gateway keys it needs for drafts, replay and shadow.
 
 ### If the server is unavailable
 
@@ -265,16 +299,18 @@ Records that cannot be delivered are dropped.
 | `DECIDUS_API_KEY` | Unset | When set, requires the key for the API and UI |
 | `DECIDUS_DB` or `--db` | `~/.decidus/decidus.db` | Database location |
 | `PORT` or `--port` | `7700` | Server port |
-| `DECIDUS_SUGGEST_MODEL` | `openai/gpt-6.1-sol`, otherwise a provider with a key set | Model for policy suggestions |
+| `DECIDUS_SUGGEST_MODEL` | `openai/gpt-6.1-sol`, otherwise a provider with a key set | Model that writes drafts |
+| `DECIDUS_OBSERVE` | `20` | Calls a scope needs before decidus tells fixed text from varying text and may tune it |
 | `DECIDUS_WARMUP` | `20` | Initial calls per policy and scope eligible for review |
 | `DECIDUS_SAMPLE_RATE` | `0.1` | Review sample rate after warmup |
 | `DECIDUS_QUEUE_SIZE` | `50` | Calls shown in the queue at a time |
-| `DECIDUS_MAX_CASES` | `100` | Maximum cases used to write and replay a suggestion |
+| `DECIDUS_MAX_CASES` | `40` | Maximum cases the writer sees at once, disagreements first |
+| `DECIDUS_REPLAY_CASES` | `300` | Maximum decided cases a version is replayed against |
 | `DECIDUS_GATEWAY_URL` | Unset | Gateway base URL for replay |
 | `DECIDUS_GATEWAY_KEY` | Unset | Sent to that gateway as `Authorization: Bearer <key>` during replay |
 | `DECIDUS_RETENTION_DAYS` | `30` | After this many days, unreviewed calls keep their rows but lose input and output. Set to `0` to keep everything. |
 
-Run `npx decidus reset` to delete the local database. Databases from version 0.1 are upgraded in place on first start.
+Run `npx decidus reset` to delete the local database. Databases from earlier versions are upgraded in place on first start. Versions written by 0.3 were option descriptions; they stay in the history but no longer change calls.
 
 ## Keyboard shortcuts
 
@@ -286,9 +322,10 @@ Run `npx decidus reset` to delete the local database. Databases from version 0.1
 | `x` | Select a case under **Decided** |
 | `/` | Search calls |
 
-## Limits in 0.3
+## Limits in 0.4
 
 - Streamed decision calls receive the live policy, but are not recorded or queued.
+- Shadow and replay make real calls with the server's keys. Shadow skips calls when it falls behind.
 - Replay authenticates to public provider APIs and one gateway. Direct replay to Azure OpenAI, Bedrock or Vertex is not supported yet; replay through a gateway is supported.
 - Fixed-choice fields inside arrays of objects are not recognized as decisions yet.
 - One server is one project. Everyone with its key can see every scope. Per-scope reviewer access is planned for the hosted version.

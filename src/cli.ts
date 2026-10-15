@@ -28,7 +28,7 @@ if (cmd === "serve") {
     const w = writer();
     console.log(`decidus  http://localhost:${port}`);
     console.log(`db       ${db}`);
-    console.log(w ? `writer   ${w.provider}/${w.model}` : "writer   none: set OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY to write suggestions");
+    console.log(w ? `writer   ${w.provider}/${w.model}` : "writer   none: set OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY to write drafts");
   });
 } else if (cmd === "reset") {
   rmSync(db, { force: true }); rmSync(db + "-wal", { force: true }); rmSync(db + "-shm", { force: true });

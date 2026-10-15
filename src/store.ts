@@ -1,17 +1,21 @@
 import { DatabaseSync } from "node:sqlite";
-import { prefixes, type PolicyText, type Spec, type LivePolicy, type LiveSet } from "./shapes.js";
+import { prefixes, type Doc, type Spec, type LivePolicy, type LiveSet } from "./shapes.js";
 
-export interface Suggestion {
-  base: number;
-  text: PolicyText;
-  because: Record<string, number[]>;
-  added: number[];
-  cases: number[];
+/** The next version, being written and tried. Edits are against the code's text (see clauses.ts). */
+export interface Draft {
+  base: number;                          // the version it was written on top of
+  ops: Doc;
+  keys: Record<string, string[]>;        // per part, the editable clauses of the code's text it was written against
+  because: Record<string, number[]>;     // per part, the cases behind its wording
+  added: number[];                       // decided cases it learned from that no version used yet
+  cases: number[];                       // every case the writer saw
   notes?: string;
   replay: ReplayResult[] | null;
   tune: LogEntry[];
   created_at: string;
 }
+/** A version being tried on live traffic before it goes live: shadow (re-run on the side) or canary (served). */
+export interface Candidate { n: number; mode: "shadow" | "canary"; pct: number; since: string }
 export interface LogEntry { round: number; pass: number | null; n: number | null; note: string }
 export interface ReplayResult { id: number; human: string; model: string | null; pass: boolean; error?: string }
 
@@ -19,11 +23,16 @@ export interface PolicyRow {
   name: string; route: Spec["route"]; kind: Spec["kind"]; options: string[]; field: string | null;   // field: path in the schema
   instructions: string | null; code_text: string | null; model: string | null; created_at: string;
 }
-/** A scope's pointer into the policy's versions. live = null: the scope runs its parent's version. */
-export interface VariantRow { policy: string; scope: string; live: number | null; suggestion: Suggestion | null }
+/**
+ * A scope's pointer into the policy's versions (live = null: the scope runs its parent's version),
+ * its draft, the candidate being tried, and the clauses people locked (per part, normalized clause text).
+ */
+export interface VariantRow { policy: string; scope: string; live: number | null; draft: Draft | null; candidate: Candidate | null; locks: Record<string, string[]> }
 export interface VersionRow {
-  policy: string; n: number; scope: string; base: number | null; text: PolicyText; because: Record<string, number[]>;
-  cases: number[]; replay: ReplayResult[] | null; log: { notes?: string; tune: LogEntry[] } | null; created_at: string;
+  policy: string; n: number; scope: string; base: number | null; ops: Doc; keys: Record<string, string[]>; because: Record<string, number[]>;
+  cases: number[]; replay: ReplayResult[] | null; log: { notes?: string; tune: LogEntry[]; rebased?: number } | null; created_at: string;
+  /** Written by decidus 0.3 as option descriptions; it no longer changes calls. */
+  legacy?: boolean;
 }
 export interface CaseRow {
   id: number; policy: string; scope: string; version: number; model: string | null;
@@ -32,16 +41,20 @@ export interface CaseRow {
   trace_id: string | null; conversation_id: string | null; event_id: string | null; headline: string; metadata: Record<string, unknown>;
   /** The decision's own key in the request (see Spec.key), and the options this call had. */
   spec: string | null; options: string[] | null;
+  /** Edits of the version it ran that no longer applied: the code had changed the clause they edit. */
+  retired: number;
+  /** Shadow: the candidate version this call was re-run with, and its answer. */
+  shadow_version: number | null; shadow_answer: string | null;
   // bodies; null once pruned
   url: string; headers: Record<string, string>; request: any; response: any;
 }
-export type NewCase = Omit<CaseRow, "id" | "decision" | "decided_at" | "used_in" | "created_at">;
+export type NewCase = Omit<CaseRow, "id" | "decision" | "decided_at" | "used_in" | "created_at" | "shadow_version" | "shadow_answer">;
 export interface CallFilter { answer?: string; version?: number; decided?: "yes" | "no"; queued?: boolean; maxConf?: number; minConf?: number; text?: string }
 
 const now = () => new Date().toISOString();
 const j = (s: unknown) => (s == null ? null : JSON.parse(String(s)));
 /** Rows in lists: everything but the bodies. */
-const LIGHT = "id, scope, version, model, answer, confidence, escalated, decision, decided_at, used_in, status, ms, created_at, trace_id, conversation_id, event_id, headline";
+const LIGHT = "id, scope, version, model, answer, confidence, escalated, decision, decided_at, used_in, status, ms, created_at, trace_id, conversation_id, event_id, headline, retired, shadow_version, shadow_answer";
 /** " and <cases in scope S or under it>", as an index range; S = "" is everything. */
 function inScope(s: string): [string, string[]] {
   // one index range [s, s + "0"), "0" sorting right after "/", then drop look-alikes such as "acme-eu" for "acme"
@@ -58,7 +71,7 @@ const SCHEMA = `
     name text primary key, route text, kind text, options text, field text, instructions text,
     code_text text, model text, created_at text);
   create table if not exists variants (
-    policy text, scope text, live integer, suggestion text, primary key (policy, scope));
+    policy text, scope text, live integer, suggestion text, primary key (policy, scope));   -- suggestion: the draft
   create table if not exists versions (
     policy text, n integer, scope text not null default '', base integer, text text, because text, cases text,
     replay text, log text, created_at text, primary key (policy, n));
@@ -82,15 +95,22 @@ const SCHEMA = `
 
 export class Store {
   db: DatabaseSync;
+  /** Calls a scope needs before decidus tells static text from dynamic and may tune it. */
+  observe = 20;
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec("pragma journal_mode = wal; pragma synchronous = normal;");
     const old = (this.db.prepare("pragma table_info(cases)").all() as any[]).some(c => c.name === "request");
     if (old) this.migrate01();
     this.db.exec(SCHEMA);
-    const cols = new Set((this.db.prepare("pragma table_info(cases)").all() as any[]).map(c => c.name));   // 0.2
-    if (!cols.has("spec")) this.db.exec("alter table cases add column spec text");
-    if (!cols.has("options")) this.db.exec("alter table cases add column options text");
+    const add = (table: string, cols: Record<string, string>) => {                                   // 0.2, 0.4
+      const has = new Set((this.db.prepare(`pragma table_info(${table})`).all() as any[]).map(c => c.name));
+      for (const [c, type] of Object.entries(cols)) if (!has.has(c)) this.db.exec(`alter table ${table} add column ${c} ${type}`);
+    };
+    add("cases", { spec: "text", options: "text", retired: "integer not null default 0", shadow_version: "integer", shadow_answer: "text" });
+    add("versions", { doc: "text" });
+    add("variants", { candidate: "text", locks: "text" });
+    this.db.exec("create index if not exists cases_shadow on cases (policy, shadow_version) where shadow_version is not null");
   }
 
   /** 0.1 kept bodies in `cases` and one live pointer per policy. */
@@ -124,32 +144,39 @@ export class Store {
     this.db.prepare(`insert into policies (name, route, kind, options, field, instructions, code_text, model, created_at)
       values (?, ?, ?, ?, ?, ?, ?, ?, ?) on conflict (name) do update set route = excluded.route, kind = excluded.kind, options = excluded.options,
       field = excluded.field, instructions = excluded.instructions, code_text = excluded.code_text, model = coalesce(excluded.model, model)`)
-      .run(s.name, s.route, s.kind, JSON.stringify(s.options), s.path ?? null, s.instructions ?? null, s.codeText ?? null, model, now());
+      .run(s.name, s.route, s.kind, JSON.stringify(s.options), s.path ?? null, s.instructions ?? null, null, model, now());
     if (!this.version(s.name, 0)) {
-      this.addVersion({ policy: s.name, n: 0, scope: "", base: null, text: {}, because: {}, cases: [], replay: null, log: null });
+      this.addVersion({ policy: s.name, n: 0, scope: "", base: null, ops: {}, keys: {}, because: {}, cases: [], replay: null, log: null });
       this.setLive(s.name, "", 0);
     }
   }
 
-  // ---------- variants: per-scope live pointer + open suggestion ----------
-  private variantRow(r: any): VariantRow { return { ...r, suggestion: j(r.suggestion) }; }
+  // ---------- variants: per-scope live pointer, draft, candidate, locks ----------
+  private variantRow(r: any): VariantRow {
+    const draft = j(r.suggestion);
+    return { policy: r.policy, scope: r.scope, live: r.live, draft: draft?.ops ? draft : null, candidate: j(r.candidate), locks: j(r.locks) ?? {} };
+  }
   variant(policy: string, scope: string): VariantRow {
     const r = this.db.prepare("select * from variants where policy = ? and scope = ?").get(policy, scope);
-    return r ? this.variantRow(r) : { policy, scope, live: null, suggestion: null };
+    return r ? this.variantRow(r) : { policy, scope, live: null, draft: null, candidate: null, locks: {} };
   }
   variants(policy: string): VariantRow[] {
     return this.db.prepare("select * from variants where policy = ? order by scope").all(policy).map(r => this.variantRow(r));
   }
   private putVariant(v: VariantRow) {
-    if (v.scope && v.live == null && !v.suggestion) {
+    this.liveCache = null;
+    if (v.scope && v.live == null && !v.draft && !v.candidate && !Object.keys(v.locks).length) {
       this.db.prepare("delete from variants where policy = ? and scope = ?").run(v.policy, v.scope);
       return;
     }
-    this.db.prepare(`insert into variants (policy, scope, live, suggestion) values (?, ?, ?, ?)
-      on conflict (policy, scope) do update set live = excluded.live, suggestion = excluded.suggestion`)
-      .run(v.policy, v.scope, v.live, v.suggestion ? JSON.stringify(v.suggestion) : null);
+    const js = (x: unknown) => (x ? JSON.stringify(x) : null);
+    this.db.prepare(`insert into variants (policy, scope, live, suggestion, candidate, locks) values (?, ?, ?, ?, ?, ?)
+      on conflict (policy, scope) do update set live = excluded.live, suggestion = excluded.suggestion, candidate = excluded.candidate, locks = excluded.locks`)
+      .run(v.policy, v.scope, v.live, js(v.draft), js(v.candidate), Object.keys(v.locks).length ? JSON.stringify(v.locks) : null);
   }
-  setSuggestion(policy: string, scope: string, s: Suggestion | null) { this.putVariant({ ...this.variant(policy, scope), suggestion: s }); }
+  setDraft(policy: string, scope: string, d: Draft | null) { this.putVariant({ ...this.variant(policy, scope), draft: d }); }
+  setCandidate(policy: string, scope: string, c: Candidate | null) { this.putVariant({ ...this.variant(policy, scope), candidate: c }); }
+  setLocks(policy: string, scope: string, locks: Record<string, string[]>) { this.putVariant({ ...this.variant(policy, scope), locks }); }
   /** n = null: the scope goes back to running its parent's version. */
   setLive(policy: string, scope: string, n: number | null) { this.putVariant({ ...this.variant(policy, scope), live: scope ? n : (n ?? 0) }); }
   /** The version a call in `scope` runs, and which scope set it. */
@@ -160,21 +187,45 @@ export class Store {
     }
     return { n: 0, from: "" };
   }
-  live(): LiveSet {
-    const out: LiveSet = { policies: {}, scopes: {} };
-    const rows = this.db.prepare(`select a.policy, a.scope, a.live, v.text from variants a
-      join versions v on v.policy = a.policy and v.n = a.live where a.live is not null`).all() as any[];
-    for (const r of rows) {
-      const lp: LivePolicy = { version: r.live, text: j(r.text) };
-      if (!r.scope) { if (r.live > 0) out.policies[r.policy] = lp; }
-      else (out.scopes![r.scope] ??= {})[r.policy] = lp;     // v0 too: a scope pinned to the code as written
+  /**
+   * The candidate being tried on calls in `scope`, and the scope it was set for: the nearest one up the
+   * scope path, unless a narrower scope on the way runs its own version.
+   */
+  candidateFor(policy: string, scope: string): (Candidate & { scope: string }) | null {
+    for (const p of prefixes(scope)) {
+      const v = this.variant(policy, p);
+      if (v.candidate) return { ...v.candidate, scope: p };
+      if (v.live != null) return null;
     }
+    return null;
+  }
+  /** Union of the clauses locked in `scope` and the scopes above it. */
+  locks(policy: string, scope: string): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const p of prefixes(scope)) for (const [part, keys] of Object.entries(this.variant(policy, p).locks)) out[part] = [...new Set([...(out[part] ?? []), ...keys])];
     return out;
+  }
+  private liveCache: LiveSet | null = null;
+  live(): LiveSet {
+    if (this.liveCache) return this.liveCache;
+    const out: LiveSet = { policies: {}, scopes: {} };
+    for (const v of this.db.prepare("select * from variants").all().map(r => this.variantRow(r))) {
+      const canary = v.candidate?.mode === "canary" ? v.candidate : null;
+      if (v.live == null && !canary) continue;
+      const n = v.live ?? this.effective(v.policy, v.scope).n;
+      const lp: LivePolicy = { version: n, ops: this.version(v.policy, n)?.ops ?? {} };
+      if (canary) lp.canary = { version: canary.n, ops: this.version(v.policy, canary.n)?.ops ?? {}, pct: canary.pct };
+      if (!v.scope) { if (n > 0 || canary) out.policies[v.policy] = lp; }
+      else (out.scopes![v.scope] ??= {})[v.policy] = lp;     // v0 too: a scope pinned to the code as written
+    }
+    return (this.liveCache = out);
   }
 
   // ---------- versions ----------
   private versionRow(r: any): VersionRow {
-    return { ...r, text: j(r.text), because: j(r.because), cases: j(r.cases), replay: j(r.replay), log: j(r.log) };
+    const doc = j(r.doc);
+    return { policy: r.policy, n: r.n, scope: r.scope, base: r.base, ops: doc?.ops ?? {}, keys: doc?.keys ?? {}, because: j(r.because) ?? {},
+      cases: j(r.cases) ?? [], replay: j(r.replay), log: j(r.log), created_at: r.created_at, ...(!doc && r.n > 0 ? { legacy: true } : {}) };
   }
   versions(policy: string): VersionRow[] {
     return this.db.prepare("select * from versions where policy = ? order by n").all(policy).map(r => this.versionRow(r));
@@ -186,9 +237,9 @@ export class Store {
   nextVersion(policy: string): number {
     return ((this.db.prepare("select max(n) as n from versions where policy = ?").get(policy) as any).n ?? -1) + 1;
   }
-  addVersion(v: Omit<VersionRow, "created_at">) {
-    this.db.prepare("insert into versions (policy, n, scope, base, text, because, cases, replay, log, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(v.policy, v.n, v.scope, v.base, JSON.stringify(v.text), JSON.stringify(v.because), JSON.stringify(v.cases),
+  addVersion(v: Omit<VersionRow, "created_at" | "legacy">) {
+    this.db.prepare("insert into versions (policy, n, scope, base, text, doc, because, cases, replay, log, created_at) values (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?)")
+      .run(v.policy, v.n, v.scope, v.base, JSON.stringify({ ops: v.ops, keys: v.keys }), JSON.stringify(v.because), JSON.stringify(v.cases),
         v.replay ? JSON.stringify(v.replay) : null, v.log ? JSON.stringify(v.log) : null, now());
   }
   setVersionReplay(policy: string, n: number, replay: ReplayResult[]) {
@@ -202,11 +253,12 @@ export class Store {
   }
   addCase(c: NewCase): number {
     const r = this.db.prepare(`insert into cases (policy, scope, version, model, answer, confidence, escalated, status, ms, created_at,
-      trace_id, conversation_id, event_id, headline, metadata, spec, options) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      trace_id, conversation_id, event_id, headline, metadata, spec, options, retired) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(c.policy, c.scope, c.version, c.model, c.answer, c.confidence, c.escalated ? 1 : 0, c.status, c.ms, now(),
-        c.trace_id, c.conversation_id, c.event_id, c.headline, JSON.stringify(c.metadata), c.spec, c.options ? JSON.stringify(c.options) : null);
+        c.trace_id, c.conversation_id, c.event_id, c.headline, JSON.stringify(c.metadata), c.spec, c.options ? JSON.stringify(c.options) : null, c.retired);
     const id = Number(r.lastInsertRowid);
     this.seenScopes.get(c.policy)?.add(c.scope);
+    this.stamps.set(c.policy, id);
     this.db.prepare("insert into bodies (id, url, headers, request, response) values (?, ?, ?, ?, ?)")
       .run(id, c.url, JSON.stringify(c.headers), JSON.stringify(c.request), JSON.stringify(c.response));
     return id;
@@ -216,6 +268,29 @@ export class Store {
     return r ? this.caseRow(r) : null;
   }
   cases(ids: number[]): CaseRow[] { return ids.map(id => this.case(id)).filter((c): c is CaseRow => !!c); }
+  private stamps = new Map<string, number>();
+  /** The newest case id of a policy: changes whenever a call arrives. */
+  stamp(policy: string): number {
+    if (!this.stamps.has(policy)) this.stamps.set(policy, (this.db.prepare("select max(id) as n from cases where policy = ?").get(policy) as any).n ?? 0);
+    return this.stamps.get(policy)!;
+  }
+  /** The newest calls in a scope that still have their bodies: what the code sends now. */
+  samples(policy: string, scope: string, n: number): { id: number; spec: string | null; url: string; request: any }[] {
+    const ids = this.newest("policy = ?", [policy], scope, n * 2, "cases_recent").map(r => r.id);
+    if (!ids.length) return [];
+    return (this.db.prepare(`select c.id, c.spec, b.url, b.request from cases c join bodies b on b.id = c.id where c.id in (${ids.map(() => "?").join(",")})
+      and b.request is not null order by c.id desc limit ?`).all(...ids, n) as any[]).map(r => ({ ...r, request: j(r.request) }));
+  }
+  /** Decided cases in a scope, newest first, with bodies: what a version is replayed against. */
+  decidedCases(policy: string, scope: string, limit: number): CaseRow[] {
+    const [w, a] = inScope(scope);
+    const ids = (this.db.prepare(`select id from cases where policy = ? and decision is not null${w} order by id desc limit ?`).all(policy, ...a, limit) as any[]).map(r => r.id);
+    return this.cases(ids);
+  }
+  setShadow(id: number, version: number, answer: string | null, escalate: boolean) {
+    this.db.prepare(`update cases set shadow_version = ?, shadow_answer = ?, escalated = case when ? and decision is null then 1 else escalated end where id = ?`)
+      .run(version, answer, escalate ? 1 : 0, id);
+  }
 
   /** Reviewable calls seen so far in exactly this scope, up to `cap` (enough to know if warm-up is over). */
   eligibleCount(policy: string, scope: string, cap: number): number {
@@ -316,6 +391,34 @@ export class Store {
     const st = this.db.prepare("select count(*) as n from cases where policy = ? and created_at >= ? and created_at < ?");
     const day = (i: number) => new Date(start + i * 86_400_000).toISOString();
     return Array.from({ length: days }, (_, i) => (st.get(policy, day(i), day(i + 1)) as any).n);
+  }
+  /**
+   * Live version vs candidate since the candidate started: answer distribution, how often reviewers
+   * agreed with each, and for shadow, how often the two disagreed on the same call.
+   */
+  compare(policy: string, scope: string, live: number, c: Candidate) {
+    const [w, a] = inScope(scope);
+    const q = (sql: string, ...args: unknown[]) => this.db.prepare(sql).all(policy, c.since, ...(args as any[]), ...a) as any[];
+    const dist = (rows: any[]) => Object.fromEntries(rows.map(r => [r.answer ?? "", r.n]));
+    const base = "from cases where policy = ? and created_at >= ?";
+    const liveDist = dist(q(`select answer, count(*) as n ${base} and version = ?${w} group by answer`, live));
+    const candDist = c.mode === "canary"
+      ? dist(q(`select answer, count(*) as n ${base} and version = ?${w} group by answer`, c.n))
+      : dist(q(`select shadow_answer as answer, count(*) as n ${base} and shadow_version = ?${w} group by shadow_answer`, c.n));
+    const agree = (sql: string, v: number) => { const r = q(sql, v)[0]; return { n: r?.n ?? 0, agree: r?.agree ?? 0 }; };
+    const liveAgree = agree(`select count(*) as n, sum(decision = answer) as agree ${base} and version = ? and decision is not null${w}`, live);
+    const candAgree = c.mode === "canary"
+      ? agree(`select count(*) as n, sum(decision = answer) as agree ${base} and version = ? and decision is not null${w}`, c.n)
+      : agree(`select count(*) as n, sum(decision = shadow_answer) as agree ${base} and shadow_version = ? and decision is not null${w}`, c.n);
+    const paired = c.mode === "shadow" ? q(`select count(*) as n, sum(shadow_answer is not answer) as differ ${base} and shadow_version = ?${w}`, c.n)[0] : null;
+    return { live: { n: live, answers: liveDist, reviewed: liveAgree }, candidate: { n: c.n, answers: candDist, reviewed: candAgree },
+      paired: paired ? { n: paired.n ?? 0, differ: paired.differ ?? 0 } : null };
+  }
+  /** Of the newest calls that ran version n in a scope: how many had edits that no longer applied, and the newest such call. */
+  retiredOn(policy: string, scope: string, n: number, last = 100): { calls: number; of: number; latest: number | null; newest: number | null } {
+    const [w, a] = inScope(scope);
+    const rows = this.db.prepare(`select id, retired from cases where policy = ? and version = ?${w} order by id desc limit ?`).all(policy, n, ...a, last) as any[];
+    return { calls: rows.filter(r => r.retired > 0).length, of: rows.length, latest: rows.find(r => r.retired > 0)?.id ?? null, newest: rows[0]?.id ?? null };
   }
   decide(id: number, value: string | null) {
     this.db.prepare("update cases set decision = ?, decided_at = ? where id = ? and used_in is null").run(value, value == null ? null : now(), id);

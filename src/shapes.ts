@@ -9,14 +9,18 @@
  *   - a question in a TypeSafe Jev call (POST .../v1/systemone)                 policy = question key
  * A fixed-choice field is an enum, const alternatives (anyOf/oneOf), a boolean, or an array of those.
  *
- * A policy's text is a map option -> description. decidus only ever writes that text into the
- * request; options, names and schema stay exactly as the caller wrote them.
+ * A policy is the decision's own text: every string that belongs to it (the field's description,
+ * the question's instructions, each criterion), versioned as clause edits against what the code
+ * sends (see clauses.ts). decidus only ever changes that text; options, names, objects and the
+ * rest of the schema stay exactly as the caller wrote them.
  */
+import { patch, type Doc } from "./clauses.js";
+export type { Doc, Op } from "./clauses.js";
 
 export type Route = "decisions" | "systemone" | "chat" | "responses" | "anthropic" | "gemini";
 export type Kind = "bool" | "category" | "scale" | "multi";
-export type PolicyText = Record<string, string>;
-export interface LivePolicy { version: number; text: PolicyText }
+/** What a call runs: a version's edits, and maybe a candidate version served to a share of calls. */
+export interface LivePolicy { version: number; ops: Doc; canary?: { version: number; ops: Doc; pct: number } }
 /** What GET /v1/policies returns: the global live versions, and per-scope overrides. */
 export interface LiveSet { policies: Record<string, LivePolicy>; scopes?: Record<string, Record<string, LivePolicy>> }
 
@@ -56,7 +60,6 @@ export interface Spec {
   /** Field path inside the schema, for tool and format decisions. */
   path?: string;
   instructions?: string;   // the question / tool / schema description, as the caller wrote it
-  codeText?: string;       // descriptions already present in the caller's code (v0 context)
 }
 
 /** Maps a decision's key to the policy it belongs to; null leaves the decision alone. */
@@ -168,7 +171,6 @@ function locate(schema: J, path: string[]): J | null {
 }
 
 const getPath = (v: J, path: string[]) => path.reduce((x, k) => (x && typeof x === "object" ? x[k] : undefined), v);
-const join = (a: J, b: string) => [typeof a === "string" ? a : "", b].filter(Boolean).join("\n\n");
 
 function value(v: J, kind: Kind): string | null {
   if (v === undefined || v === null) return null;
@@ -242,16 +244,34 @@ function output(route: Route, r: J): J {
   return null;
 }
 
-// ---------------- decisions: what a request decides, how to write a policy into it, how to read the answer ----------------
+// ---------------- decisions: what a request decides, its text, and how to read the answer ----------------
 
+/**
+ * A decision found in a request. `parts` is its text as the code wrote it, by part:
+ *   schema field:  "description", and "items.description" for a multi-select that has one
+ *   Jev question:  "instructions" (or "instructions.<key>" for each string in an instructions object), "criteria.<option>"
+ *   Decisions:     "instructions", "choices.<value>", "levels.<label>"
+ * Only strings are parts: objects (an article card), arrays (examples) and option sets are never written.
+ */
 interface Found extends Omit<Spec, "name"> {
-  write(text: PolicyText): void;      // into the request it was found in
+  parts(): Record<string, string>;
+  set(part: string, text: string): void;     // into the request it was found in
   read(response: J): Answer;
+  /** Free text the model wrote next to its answer (a reasoning field), for reviewers and the writer. */
+  said(response: J): Record<string, string>;
+  /** What this decision is about in this call, beyond its text: an article card, a rule's examples. */
+  about(): string | null;
 }
 
 const certainP = (p: number) => p >= 0.8 || p <= 0.2;
 const parse = (s: J) => { try { return typeof s === "string" ? JSON.parse(s) : s ?? null; } catch { return null; } };
 const plain = (v: string | null): Answer => ({ value: v, confidence: null, certain: false });
+const text0 = (x: J) => (typeof x === "string" ? x : "");
+const rest = (part: string, prefix: string) => (part.startsWith(prefix + ".") ? part.slice(prefix.length + 1) : null);
+/** String fields of an answer object other than the answer itself (Decisions and Jev can return a reasoning). */
+const strings = (x: J, skip: string[] = []): Record<string, string> =>
+  x && typeof x === "object" ? Object.fromEntries(Object.entries<J>(x).filter(([k, v]) => typeof v === "string" && v.trim() && !skip.includes(k))) : {};
+const brief = (x: J) => { const s = JSON.stringify(x); return s.length > 1200 ? s.slice(0, 1200) + "…" : s; };
 
 function found(route: Route, body: J): Found[] {
   if (!body || typeof body !== "object") return [];
@@ -259,20 +279,28 @@ function found(route: Route, body: J): Found[] {
   if (route === "decisions") {
     for (const q of Array.isArray(body.questions) ? body.questions : []) {
       if (!q?.name) continue;
-      const key = String(q.name), base = { key, route, source: "question" as const, instructions: q.instructions };
+      const key = String(q.name);
       const pick = (r: J) => (r?.answers ?? []).find((y: J) => y?.name === key);
+      const list: J[] = q.type === "choice" ? q.choices ?? [] : q.type === "score" ? q.levels ?? [] : [];
+      const field = q.type === "choice" ? "value" : "label", prefix = q.type === "choice" ? "choices" : "levels";
+      const base = {
+        key, route, source: "question" as const, instructions: text0(q.instructions) || undefined,
+        parts: () => ({ instructions: text0(q.instructions), ...Object.fromEntries(list.map(c => [`${prefix}.${c?.[field]}`, text0(c?.description)])) }),
+        set: (part: string, t: string) => {
+          if (part === "instructions") q.instructions = t;
+          const o = rest(part, prefix), c = o != null && list.find(c => String(c?.[field]) === o);
+          if (c) { if (t) c.description = t; else delete c.description; }
+        },
+        said: (r: J) => strings(pick(r), ["name", "type", "choice", "label", "value"]),
+        about: () => null,
+      };
       if (q.type === "predicate") out.push({ ...base, kind: "bool", options: ["true", "false"],
-        write: t => { q.instructions = `${q.instructions}\n\nPolicy:\n${rubric(t, ["true", "false"])}`; },
         read: r => { const x = pick(r); return typeof x?.probability === "number" ? { value: String(x.probability >= 0.5), confidence: x.probability, certain: certainP(x.probability) } : plain(null); } });
-      else if (q.type === "choice") out.push({ ...base, kind: "category", options: (q.choices ?? []).map((c: J) => String(c.value)),
-        codeText: describe(Object.fromEntries((q.choices ?? []).filter((c: J) => c.description).map((c: J) => [String(c.value), c.description]))),
-        write: t => { for (const c of q.choices ?? []) if (t[String(c.value)]) c.description = t[String(c.value)]; },
+      else if (q.type === "choice") out.push({ ...base, kind: "category", options: list.map(c => String(c.value)),
         read: r => { const x = pick(r); return x?.choice != null ? { value: String(x.choice), confidence: x.confidence ?? null, certain: (x.confidence ?? 0) >= 0.8 } : plain(null); } });
       else if (q.type === "score") {
-        const options = (q.levels ?? []).map((l: J) => String(l.label));
+        const options = list.map(l => String(l.label));
         out.push({ ...base, kind: "scale", options,
-          codeText: describe(Object.fromEntries((q.levels ?? []).filter((l: J) => l.description).map((l: J) => [String(l.label), l.description]))),
-          write: t => { for (const l of q.levels ?? []) if (t[String(l.label)]) l.description = t[String(l.label)]; },
           read: r => {
             const x = pick(r);
             if (!x) return plain(null);
@@ -285,24 +313,65 @@ function found(route: Route, body: J): Found[] {
   }
   if (route === "systemone") {
     for (const [key, q] of Object.entries<J>(body.questions && !Array.isArray(body.questions) ? body.questions : {})) {
-      const crit = q?.criteria && typeof q.criteria === "object" && !Array.isArray(q.criteria) ? q.criteria : {};
-      const base = { key, route, source: "question" as const, instructions: str(q?.instructions), codeText: describe(crit) };
-      const write = (opts: string[]) => (t: PolicyText) => { q.criteria = { ...(q.criteria ?? {}) }; for (const o of opts) if (t[o]) q.criteria[o] = t[o]; };
-      if (q?.type === "noul") out.push({ ...base, kind: "bool", options: ["true", "false"], write: write(["true", "false"]),
+      if (!q || typeof q !== "object") continue;
+      const crit = () => (q.criteria && typeof q.criteria === "object" && !Array.isArray(q.criteria) ? q.criteria : {});
+      const ins = () => (q.instructions && typeof q.instructions === "object" && !Array.isArray(q.instructions) ? q.instructions : null);
+      const base = {
+        key, route, source: "question" as const,
+        instructions: typeof q.instructions === "string" ? q.instructions : text0(ins()?.question) || str(q.instructions),
+        parts: () => {
+          const o: Record<string, string> = {};
+          if (typeof q.instructions === "string") o.instructions = q.instructions;
+          for (const [k, v] of Object.entries<J>(ins() ?? {})) if (typeof v === "string") o[`instructions.${k}`] = v;
+          for (const [k, v] of Object.entries<J>(crit())) if (typeof v === "string") o[`criteria.${k}`] = v;
+          return o;
+        },
+        set: (part: string, t: string) => {
+          if (part === "instructions") q.instructions = t;
+          const i = rest(part, "instructions"), c = rest(part, "criteria");
+          if (i != null && ins() && typeof ins()[i] === "string") q.instructions = { ...ins(), [i]: t };
+          if (c != null && typeof crit()[c] === "string") q.criteria = { ...crit(), [c]: t };
+        },
+        said: (r: J) => strings(r?.answers?.[key], ["type", "choice"]),
+        about: () => {
+          const objects = [...Object.entries<J>(ins() ?? {}), ...Object.entries<J>(crit())].filter(([, v]) => v != null && typeof v === "object");
+          return objects.length ? objects.map(([k, v]) => `${k}: ${brief(v)}`).join("\n") : null;
+        },
+      };
+      if (q.type === "noul") out.push({ ...base, kind: "bool", options: ["true", "false"],
         read: r => { const x = r?.answers?.[key]; return typeof x?.noul === "number" ? { value: String(x.noul >= 0.5), confidence: x.noul, certain: certainP(x.noul) } : plain(null); } });
-      else if (q?.type === "choice") out.push({ ...base, kind: "category", options: Object.keys(crit), write: write(Object.keys(crit)),
+      else if (q.type === "choice") out.push({ ...base, kind: "category", options: Object.keys(crit()),
         read: r => { const x = r?.answers?.[key]; return x?.choice != null ? { value: String(x.choice), confidence: x.confidence ?? null, certain: (x.confidence ?? 0) >= 0.8 } : plain(null); } });
       // score criteria are the level descriptions themselves; not managed
     }
     return out;
   }
   const schemaDecisions = (prefix: string, schema: J, source: "tool" | "format", instructions: string | undefined, read: (r: J) => J) => {
-    for (const f of fields(schema)) out.push({
-      key: `${prefix}.${f.path.join(".")}`, route, kind: f.choice.kind, options: f.choice.options, source, path: f.path.join("."),
-      instructions, codeText: typeof f.node.description === "string" ? f.node.description : undefined,
-      write: t => { const n = locate(schema, f.path); if (n) n.description = join(n.description, rubric(t, f.choice.options)); },
-      read: r => plain(value(getPath(read(r), f.path), f.choice.kind)),
-    });
+    const all = fields(schema), decisionPaths = new Set(all.map(f => f.path.join(".")));
+    for (const f of all) {
+      const items = () => (f.choice.kind === "multi" ? deref(f.node.items, schema) : null);
+      out.push({
+        key: `${prefix}.${f.path.join(".")}`, route, kind: f.choice.kind, options: f.choice.options, source, path: f.path.join("."), instructions,
+        parts: () => ({ description: text0(f.node.description), ...(typeof items()?.description === "string" ? { "items.description": items().description } : {}) }),
+        set: (part, t) => {
+          const n = locate(schema, f.path);
+          if (!n) return;
+          if (part === "description") { if (t || n.description !== undefined) n.description = t; }
+          else if (part === "items.description" && n.items) { n.items = structuredClone(deref(n.items, schema)); n.items.description = t; }
+        },
+        read: r => plain(value(getPath(read(r), f.path), f.choice.kind)),
+        said: r => {             // every free-text field of the output: "reasoning", "chosen_tags.why", ...
+          const o: Record<string, string> = {};
+          const walk = (v: J, path: string[]) => {
+            if (typeof v === "string" && v.trim() && !decisionPaths.has(path.join("."))) o[path.join(".")] = v;
+            else if (v && typeof v === "object" && !Array.isArray(v) && path.length < 6) for (const [k, x] of Object.entries(v)) walk(x, [...path, k]);
+          };
+          walk(read(r), []);
+          return o;
+        },
+        about: () => null,
+      });
+    }
   };
   const tool = forcedTool(route, body);
   if (tool) schemaDecisions(tool.name, tool.schema, "tool", tool.holder.description, r => toolArgs(route, tool.name, r));
@@ -316,31 +385,47 @@ function named(f: Found, rename?: Rename): string | null {
   const n = rename(f.key, { route: f.route, kind: f.kind, options: f.options, source: f.source, instructions: f.instructions });
   return n === undefined ? f.key : n ? String(n) : null;
 }
+const spec = ({ parts, set, read, said, about, ...f }: Found, name: string): Spec => ({ ...f, name });
 
 /** The decisions a request carries. */
 export function specs(route: Route, body: J, rename?: Rename): Spec[] {
-  return found(route, body).flatMap(({ write, read, ...f }) => {
-    const name = named({ ...f, write, read }, rename);
-    return name ? [{ ...f, name }] : [];
+  return found(route, body).flatMap(f => {
+    const name = named(f, rename);
+    return name ? [spec(f, name)] : [];
   });
 }
 
-// ---------------- apply: write live policy text into the request (mutates body) ----------------
+/** One decision's text in a request, by part (see Found). Null if the request has no such decision. */
+export function textParts(route: Route, body: J, key: string): Record<string, string> | null {
+  return found(route, body).find(f => f.key === key)?.parts() ?? null;
+}
 
-export const rubric = (text: PolicyText, options?: string[]) =>
-  (options ?? Object.keys(text)).filter(o => text[o]).map(o => `${o}: ${text[o]}`).join("\n");
+// ---------------- apply: write a version's text into the request (mutates body) ----------------
 
-/** Writes each decision's live text, describing only the options this call has. Returns {policy: version}. */
-export function apply(route: Route, body: J, live: Record<string, LivePolicy>, rename?: Rename): Record<string, number> {
-  const used: Record<string, number> = {};
+/**
+ * Applies each decision's version to its text, part by part, merged with what the code sends now.
+ * Returns the version each policy ran, and how many of its edits no longer apply because the
+ * code changed the clause they edit (the code wins).
+ */
+export function apply(route: Route, body: J, live: Record<string, { version: number; ops: Doc }>, rename?: Rename):
+  { versions: Record<string, number>; retired: Record<string, number> } {
+  const versions: Record<string, number> = {}, retired: Record<string, number> = {};
   for (const f of found(route, body)) {
     const name = named(f, rename);
     const p = name ? live[name] : undefined;
-    if (!name || !p || !p.version || !f.options.some(o => p.text?.[o])) continue;
-    f.write(p.text);
-    used[name] = p.version;
+    if (!name || !p?.version || !p.ops) continue;          // no edits (or a pre-0.4 server): the call goes out as written
+    const parts = f.parts();
+    let gone = 0;
+    for (const [part, ops] of Object.entries(p.ops ?? {})) {
+      if (!(part in parts) || !Array.isArray(ops) || !ops.length) continue;      // a part this call doesn't have
+      const r = patch(parts[part], ops);
+      if (r.text !== parts[part]) f.set(part, r.text);
+      gone += r.retired.length;
+    }
+    versions[name] = p.version;
+    if (gone) retired[name] = (retired[name] ?? 0) + gone;
   }
-  return used;
+  return { versions, retired };
 }
 
 // ---------------- answers: what did the model decide ----------------
@@ -349,8 +434,7 @@ export function apply(route: Route, body: J, live: Record<string, LivePolicy>, r
 export function decided(route: Route, request: J, response: J, rename?: Rename): (Spec & { answer: Answer })[] {
   return found(route, request).flatMap(f => {
     const name = named(f, rename);
-    const { write, read, ...rest } = f;
-    return name ? [{ ...rest, name, answer: read(response) }] : [];
+    return name ? [{ ...spec(f, name), answer: f.read(response) }] : [];
   });
 }
 
@@ -366,7 +450,13 @@ export function answers(route: Route, request: J, response: J, rename?: Rename):
   return out;
 }
 
-// ---------------- excerpt: the human-readable input, for the queue and the suggestion prompt ----------------
+/** For one decision of a recorded call: the model's free text next to its answer, and what the decision was about. */
+export function evidence(route: Route, request: J, response: J, key: string): { said: Record<string, string>; about: string | null } {
+  const f = found(route, request).find(x => x.key === key);
+  return f ? { said: f.said(response), about: f.about() } : { said: {}, about: null };
+}
+
+// ---------------- excerpt: the human-readable input, for the queue and the writer ----------------
 
 export function excerpt(route: Route, body: J, max = 2400): string {
   const text = (c: J): string => typeof c === "string" ? c
@@ -390,7 +480,3 @@ export function headline(route: Route, body: J): string {
 }
 
 function str(x: J): string | undefined { return x == null ? undefined : typeof x === "string" ? x : JSON.stringify(x); }
-function describe(m: Record<string, J>): string | undefined {
-  const e = Object.entries(m).filter(([, v]) => v);
-  return e.length ? e.map(([k, v]) => `${k}: ${v}`).join("\n") : undefined;
-}

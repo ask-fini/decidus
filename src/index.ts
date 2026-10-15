@@ -8,15 +8,16 @@
  *
  * A decision call is a structured output, or a function call forced to one tool, whose schema has a
  * fixed-choice field (enum, const alternatives, boolean, or an array of those); or an OpenAI
- * Decisions or Jev call. It writes the live policy text into the request, sends it on unchanged
- * otherwise, and copies request + response to decidus in the background. Everything else passes
+ * Decisions or Jev call. It merges the live version of the decision's text into the request (the
+ * code's own text is the base), sends it on unchanged otherwise, and copies request + response to
+ * decidus in the background. Everything else passes
  * straight through. decidus never blocks a call and never changes the answer; if it is unreachable,
  * calls go out exactly as your code wrote them.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { apply, normScope, resolve, routeOf, specs, type Kind, type LiveSet, type Rename, type Route } from "./shapes.js";
+import { apply, normScope, resolve, routeOf, specs, type Kind, type LivePolicy, type LiveSet, type Rename, type Route } from "./shapes.js";
 
-export type { LivePolicy, LiveSet, PolicyText, Spec, Route, Kind, Answer } from "./shapes.js";
+export type { LivePolicy, LiveSet, Doc, Op, Spec, Route, Kind, Answer } from "./shapes.js";
 
 /** A decision decidus found in a request, as the `name` option sees it. */
 export interface Decision {
@@ -41,6 +42,12 @@ export interface TraceContext {
   conversationId?: string;
   eventId?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Policy names for decisions whose key says nothing stable, such as a generated `rule_1`:
+   *   decidus.trace({ names: { rule_1: `guardrail_${rule.id}` } }, () => ...)
+   * Use an id that's stable for that rule (and customer), like its database uuid. Applied before `name`.
+   */
+  names?: Record<string, string>;
 }
 export interface Options {
   /** Hosted API key. Defaults to DECIDUS_API_KEY. */
@@ -66,7 +73,20 @@ const als = new AsyncLocalStorage<TraceContext>();
 /** Tag every decision made inside fn: decidus.trace({ scope: "acme/support-bot", conversationId }, () => ...) */
 export function trace<T>(ctx: TraceContext, fn: () => T): T {
   const outer = als.getStore() ?? {};
-  return als.run({ ...outer, ...ctx, metadata: { ...outer.metadata, ...ctx.metadata } }, fn);
+  return als.run({ ...outer, ...ctx, metadata: { ...outer.metadata, ...ctx.metadata }, names: { ...outer.names, ...ctx.names } }, fn);
+}
+
+/** 0-100, the same for the same policy and conversation, so a conversation stays on one version. */
+function bucket(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return ((h >>> 0) % 10000) / 100;
+}
+/** The version a call runs: the candidate for its share of calls (per conversation when there is one), else live. */
+function serve(name: string, p: LivePolicy, conversation: string | null) {
+  const c = p.canary;
+  if (c && c.pct > 0 && (conversation ? bucket(`${name}|${conversation}`) : Math.random() * 100) < c.pct) return { version: c.version, ops: c.ops };
+  return { version: p.version, ops: p.ops };
 }
 
 const SECRET = /authorization|api-key|apikey|token|secret|cookie|^x-decidus-/i;
@@ -115,14 +135,16 @@ export function fetch(opts: Options = {}): Fetch {
     const route = method === "POST" ? routeOf(new URL(url).pathname) : null;
     if (!route) return inner(input, init);
 
-    // the name hook's answers, kept to send along so the server files each decision the same way
+    // trace names and the name hook, kept to send along so the server files each decision the same way
+    const ctx = als.getStore() ?? {};
     const names: Record<string, string | null> = {};
-    const rename: Rename | undefined = opts.name && ((key, d) => {
-      let n: string | null | undefined;
-      try { n = opts.name!({ name: key, ...d }); } catch { n = undefined; }
+    const given = ctx.names ?? {};
+    const rename: Rename | undefined = (opts.name || Object.keys(given).length) ? ((key, d) => {
+      let n: string | null | undefined = given[key] ? String(given[key]) : undefined;
+      if (n === undefined && opts.name) { try { n = opts.name({ name: key, ...d }); } catch { n = undefined; } }
       if (n !== undefined && n !== key) names[key] = n || null;
       return n;
-    });
+    }) : undefined;
 
     let body: any, original: any;
     try {
@@ -132,7 +154,6 @@ export function fetch(opts: Options = {}): Fetch {
       if (!specs(route, body, rename).length) return inner(input, init);
     } catch { return inner(input, init); }
 
-    const ctx = als.getStore() ?? {};
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     const h = (k: string) => headers.get(`x-decidus-${k}`);
     const scope = normScope(h("scope") ?? ctx.scope ?? opts.scope);
@@ -140,8 +161,12 @@ export function fetch(opts: Options = {}): Fetch {
     for (const k of [...headers.keys()]) if (k.startsWith("x-decidus-")) headers.delete(k);
     headers.delete("content-length");
 
-    let versions: Record<string, number> = {};
-    try { versions = apply(route, body, resolve(await link.policies(), scope), rename); } catch { /* fail open: send as written */ }
+    let used: ReturnType<typeof apply> = { versions: {}, retired: {} };
+    try {
+      const live = resolve(await link.policies(), scope);
+      const run = Object.fromEntries(Object.entries(live).map(([n, p]) => [n, serve(n, p, ids.conversation_id)]));
+      used = apply(route, body, run, rename);
+    } catch { /* fail open: send as written */ }
 
     const t0 = Date.now();
     const res = await inner(url, { ...init, method, headers, body: JSON.stringify(body), signal: init?.signal ?? (input instanceof Request ? input.signal : undefined) });
@@ -150,8 +175,8 @@ export function fetch(opts: Options = {}): Fetch {
       const clean = new URL(url);
       clean.searchParams.delete("key");      // Gemini accepts the API key as ?key=
       res.clone().json().then(response => link.record({
-        url: clean.toString(), status: res.status, ms: Date.now() - t0, versions, scope, ...ids, metadata: ctx.metadata ?? {},
-        ...(Object.keys(names).length ? { names } : {}),
+        url: clean.toString(), status: res.status, ms: Date.now() - t0, versions: used.versions, scope, ...ids, metadata: ctx.metadata ?? {},
+        ...(Object.keys(names).length ? { names } : {}), ...(Object.keys(used.retired).length ? { retired: used.retired } : {}),
         headers: Object.fromEntries([...headers].filter(([k]) => !SECRET.test(k))),
         request: original, response,
       })).catch(() => {});

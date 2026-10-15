@@ -1,5 +1,5 @@
 // Scopes (company/bot policies with global fallback), hand edits, the three writer providers,
-// the review queue at volume, call filters, retention and the 0.1 -> 0.2 database migration.
+// the review queue at volume, call filters, retention and database migrations from 0.1 on.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -11,15 +11,17 @@ import OpenAI from "openai";
 import * as decidus from "../dist/index.js";
 import { createServer, ingest, parseFilter } from "../dist/server.js";
 import { Store } from "../dist/store.js";
-import { writer } from "../dist/loop.js";
+import { edit, rebase, stage, writer } from "../dist/loop.js";
 import { prefixes, normScope, resolve } from "../dist/shapes.js";
 
 // ---------- mock provider: a "model" that only knows what the policy text tells it, plus writer endpoints ----------
 const seen = [];
 const KNOWS = [["charge", "billing"], ["crash", "technical"], ["damaged", "shipping"], ["parcel", "shipping"]];
 const decide = (d = "", t = "") => { for (const [k, v] of KNOWS) if (d.includes(k) && t.includes(k)) return v; return "billing"; };
-const WRITTEN = [{ option: "billing", text: "unexpected or duplicate charges", cases: [] }, { option: "technical", text: "app crash", cases: [] },
-  { option: "shipping", text: "parcel late, lost or damaged", cases: [] }];
+// the writer: whatever parts the decision has, it writes each one, a little differently each time
+let writes = 0;
+const written = (tool, notes) => (writes++, { notes, parts: tool.parameters.properties.parts.items.properties.part.enum.map(part => ({ part, cases: [],
+  text: part === "description" ? `billing: unexpected or duplicate charges. technical: app crash. shipping: parcel late, lost or damaged. Draft ${writes}.` : `${part} as the writer sees it, take ${writes}.` })) });
 
 const provider = http.createServer(async (req, res) => {
   let raw = ""; for await (const c of req) raw += c;
@@ -29,11 +31,12 @@ const provider = http.createServer(async (req, res) => {
   if (req.url.includes("/slow/")) await new Promise(r => setTimeout(r, 250));
   if (req.url.endsWith("/decisions")) return json({ answers: [{ type: "choice", name: body.questions[0].name, choice: "b", confidence: 0.9 }] });
   if (req.url.includes(":generateContent")) {
-    return json({ candidates: [{ content: { role: "model", parts: [{ functionCall: { name: "write_policy", args: { options: WRITTEN, notes: "gemini wrote this" } } }] } }] });
+    const fn = body.tools[0].functionDeclarations[0];
+    return json({ candidates: [{ content: { role: "model", parts: [{ functionCall: { name: "write_policy", args: written({ parameters: fn.parametersJsonSchema }, "gemini wrote this") } }] } }] });
   }
   if (req.url.endsWith("/chat/completions")) {
     const tool = body.tools[0].function;
-    const args = tool.name === "write_policy" ? { options: WRITTEN, notes: "openai wrote this" }
+    const args = tool.name === "write_policy" ? written(tool, "openai wrote this")
       : { team: decide(tool.parameters.properties.team.description, JSON.stringify(body.messages)) };
     return json({ id: "c", object: "chat.completion", created: 0, model: body.model, choices: [{ index: 0, finish_reason: "tool_calls",
       message: { role: "assistant", content: null, tool_calls: [{ id: "x", type: "function", function: { name: tool.name, arguments: JSON.stringify(args) } }] } }] });
@@ -61,7 +64,7 @@ before(async () => {
   mock = `http://127.0.0.1:${provider.address().port}`;
   for (const k of ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"]) delete process.env[k];
   Object.assign(process.env, { OPENAI_API_KEY: "sk-writer", OPENAI_BASE_URL: mock + "/v1", DECIDUS_SUGGEST_MODEL: "" });
-  ({ server: srv } = createServer({ quiet: true, warmup: 1000 }));
+  ({ server: srv } = createServer({ quiet: true, warmup: 1000, observe: 2 }));
   await new Promise(r => srv.listen(0, r));
   base = `http://127.0.0.1:${srv.address().port}`;
   openai = new OpenAI({ apiKey: "sk-test", baseURL: mock + "/v1", fetch: decidus.fetch({ baseUrl: base, ttlMs: 0 }) });
@@ -71,26 +74,29 @@ after(() => { srv.close(); provider.close(); });
 test("scope paths", () => {
   assert.equal(normScope(" /acme//support-bot/ "), "acme/support-bot");
   assert.deepEqual(prefixes("acme/support-bot"), ["acme/support-bot", "acme", ""]);
-  const live = { policies: { p: { version: 1, text: { a: "g" } } }, scopes: { acme: { p: { version: 2, text: { a: "acme" } } }, "acme/b": { p: { version: 0, text: {} } } } };
+  const live = { policies: { p: { version: 1, ops: {} } }, scopes: { acme: { p: { version: 2, ops: {} } }, "acme/b": { p: { version: 0, ops: {} } } } };
   assert.equal(resolve(live, "acme/x").p.version, 2);
   assert.equal(resolve(live, "acme/b").p.version, 0, "a bot pinned to the code as written");
   assert.equal(resolve(live, "zeta").p.version, 1);
 });
 
 test("a company gets its own version; its bots inherit it; everyone else stays on global", async () => {
-  await route("hello, first sight");
-  await until(() => api("/api/policies/route_conversation.team").catch(() => null));
+  await route("hello, first sight"); await route("hello again");
+  for (const t of ["hi from acme", "acme again"]) await decidus.trace({ scope: "acme/support-bot" }, () => route(t));
+  await until(async () => (await api("/api/policies/route_conversation.team?scope=acme")).template.ready);
 
-  // global v1, written by hand
-  await api("/api/policies/route_conversation.team/edit", { text: { billing: "charges", technical: "crash", shipping: "parcel" } });
-  assert.equal((await api("/api/policies/route_conversation.team/accept", {})).live, 1);
+  // global v1, written by hand into the field's empty description
+  const e = await api("/api/policies/route_conversation.team/edit", { parts: { description: "billing: charges. technical: crash. shipping: parcel." } });
+  assert.deepEqual(e.ops.description, [{ op: "insert", after: null, before: null, text: "billing: charges. technical: crash. shipping: parcel." }]);
+  assert.equal((await api("/api/policies/route_conversation.team/stage", { mode: "live" })).n, 1);
 
-  // acme edits on top of what it runs (global v1) and accepts: v2 belongs to acme
-  const s = await api("/api/policies/route_conversation.team/edit", { scope: "acme", text: { shipping: "parcel; damaged items" } });
+  // acme edits on top of what it runs (global v1) and goes live: v2 belongs to acme
+  const v = await api("/api/policies/route_conversation.team/view?v=live&scope=acme");
+  assert.equal(v.edit.description, "billing: charges. technical: crash. shipping: parcel.");
+  const s = await api("/api/policies/route_conversation.team/edit", { scope: "acme", parts: { description: v.edit.description.replace("shipping: parcel.", "shipping: parcel; damaged items.") } });
   assert.equal(s.base, 1);
-  assert.equal(s.text.billing, "charges", "untouched options carry over");
-  assert.match(s.tune.at(-1).note, /Edited shipping by hand/);
-  assert.equal((await api("/api/policies/route_conversation.team/accept", { scope: "acme" })).live, 2);
+  assert.match(s.tune.at(-1).note, /Edited description by hand/);
+  assert.equal((await api("/api/policies/route_conversation.team/stage", { scope: "acme", mode: "live" })).n, 2);
 
   const live = await api("/v1/policies");
   assert.equal(live.policies["route_conversation.team"].version, 1);
@@ -99,14 +105,13 @@ test("a company gets its own version; its bots inherit it; everyone else stays o
   await route("warm-up"); await sleep(80);
   const acme = await decidus.trace({ scope: "acme/support-bot", conversationId: "conv_a1" }, () => route("the box arrived damaged"));
   assert.equal(teamOf(acme), "shipping");
-  assert.match(lastSent(), /damaged items/);
+  assert.equal(lastSent(), "billing: charges. technical: crash. shipping: parcel; damaged items.");
   const zeta = await decidus.trace({ scope: "zeta/web" }, () => route("the box arrived damaged"));
   assert.equal(teamOf(zeta), "billing", "zeta runs global v1, which knows nothing about damage");
   assert.doesNotMatch(lastSent(), /damaged/);
 
-  const calls = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls?scope=acme"); return d.calls.length === 1 && d; });
+  const calls = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls?scope=acme&q=v:2"); return d.calls.length === 1 && d; });
   assert.equal(calls.calls[0].scope, "acme/support-bot");
-  assert.equal(calls.calls[0].version, 2);
   assert.equal(calls.calls[0].conversation_id, "conv_a1");
 
   const bot = await api("/api/policies/route_conversation.team?scope=acme/support-bot");
@@ -126,7 +131,7 @@ test("a company gets its own version; its bots inherit it; everyone else stays o
 test("a scope's suggestion only learns from that scope; OpenAI writes it by default", async () => {
   await decidus.trace({ scope: "acme/support-bot" }, () => route("my charge is wrong"));
   await decidus.trace({ scope: "zeta/web" }, () => route("my parcel is late"));
-  const calls = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls?q=decided:no"); return d.calls.length >= 6 && d; });
+  const calls = await until(async () => { const d = await api("/api/policies/route_conversation.team/calls?q=decided:no"); return d.calls.some(c => c.headline.includes("parcel is late")) && d; });
   const acmeCase = calls.calls.find(c => c.scope === "acme/support-bot" && c.headline.includes("charge"));
   const zetaCase = calls.calls.find(c => c.scope === "zeta/web" && c.headline.includes("parcel"));
   await api(`/api/cases/${acmeCase.id}/decide`, { value: "billing" });
@@ -137,6 +142,7 @@ test("a scope's suggestion only learns from that scope; OpenAI writes it by defa
   assert.deepEqual(s.added, [acmeCase.id]);
   assert.equal(s.base, 2);
   assert.equal(s.notes, "openai wrote this");
+  assert.deepEqual(Object.keys(s.ops), ["description"]);
   const w = seen.filter(x => x.path.endsWith("/chat/completions") && x.body.tools[0].function.name === "write_policy").at(-1);
   assert.equal(w.body.model, "gpt-6.1-sol");
   assert.equal(w.headers.authorization, "Bearer sk-writer");
@@ -155,7 +161,7 @@ test("Gemini writes suggestions too, and writer() reads provider/model", async (
     assert.equal(g.path, "/v1beta/models/gemini-3.8-flash:generateContent");
     assert.equal(g.headers["x-goog-api-key"], "g-key");
     assert.deepEqual(g.body.toolConfig, { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["write_policy"] } });
-    assert.ok(g.body.tools[0].functionDeclarations[0].parametersJsonSchema.properties.options);
+    assert.ok(g.body.tools[0].functionDeclarations[0].parametersJsonSchema.properties.parts);
     await api("/api/policies/route_conversation.team/discard", { scope: "zeta" });
   } finally {
     process.env.DECIDUS_SUGGEST_MODEL = "";
@@ -245,7 +251,8 @@ test("a 0.1 database opens and keeps its policies, versions and cases", () => {
   db.close();
   const store = new Store(path);
   assert.deepEqual(store.effective("triage", "anything"), { n: 1, from: "" });
-  assert.deepEqual(store.live().policies.triage, { version: 1, text: { a: "x" } });
+  assert.deepEqual(store.live().policies.triage, { version: 1, ops: {} }, "0.3 versions were option descriptions; they no longer change calls");
+  assert.equal(store.version("triage", 1).legacy, true);
   assert.equal(store.version("triage", 1).base, 0);
   const c = store.case(1);
   assert.equal(c.scope, ""); assert.equal(c.trace_id, "tr_1"); assert.deepEqual(c.request, { input: "hi" }); assert.equal(c.used_in, 1);
@@ -260,18 +267,19 @@ test("review fixes: cases counted once, never taken from another version, stale 
   for (const id of ids) await api(`/api/cases/${id}/decide`, { value: "b" });
 
   // a hand edit replays against decided cases without using them up; the next suggestion lists each case once
-  const e = await api("/api/policies/triage2/edit", { text: { a: "x", b: "y" } });
-  assert.deepEqual(e.cases, ids);
-  await api("/api/policies/triage2/accept", {});
+  const e = await api("/api/policies/triage2/edit", { parts: { "choices.a": "x", "choices.b": "y" } });
+  assert.deepEqual(e.added, []);
+  assert.deepEqual((await api("/api/policies/triage2/replay", { target: "draft" })).map(r => r.id), ids);
+  await api("/api/policies/triage2/stage", { mode: "live" });
   const s = await api("/api/policies/triage2/suggest", { all: true });
   assert.deepEqual(s.cases, ids, "each case once");
   await api("/api/policies/triage2/discard", {});
 
-  // two suggestions take the same case; the first accepted keeps it
+  // two drafts take the same case; the first to become a version keeps it
   await api("/api/policies/triage2/suggest", { scope: "acme", cases: [ids[0]] });
   await api("/api/policies/triage2/suggest", { cases: [ids[0], ids[2]] });
-  const va = (await api("/api/policies/triage2/accept", { scope: "acme" })).live;
-  const vg = (await api("/api/policies/triage2/accept", {})).live;
+  const va = (await api("/api/policies/triage2/stage", { scope: "acme", mode: "live" })).n;
+  const vg = (await api("/api/policies/triage2/stage", { mode: "live" })).n;
   assert.equal((await api(`/api/cases/${ids[0]}`)).used_in, va);
   assert.equal((await api(`/api/cases/${ids[2]}`)).used_in, vg);
 
@@ -282,14 +290,14 @@ test("review fixes: cases counted once, never taken from another version, stale 
   await api("/api/policies/triage2/discard", {});
 
   // a replay that finishes after the text changed doesn't attach its results to the new text
-  await api("/api/policies/triage2/edit", { text: { a: "first" } });
-  const pending = api("/api/policies/triage2/replay", { target: "suggestion" });
+  await api("/api/policies/triage2/edit", { parts: { "choices.a": "first" } });
+  const pending = api("/api/policies/triage2/replay", { target: "draft" });
   await sleep(60);
-  await api("/api/policies/triage2/edit", { text: { a: "second" } });
+  await api("/api/policies/triage2/edit", { parts: { "choices.a": "second" } });
   assert.equal((await pending).length > 0, true);
   const d = await api("/api/policies/triage2");
-  assert.equal(d.suggestion.text.a, "second");
-  assert.equal(d.suggestion.replay, null);
+  assert.deepEqual(d.draft.ops["choices.a"], [{ op: "insert", after: null, before: null, text: "second" }]);
+  assert.equal(d.draft.replay, null);
   await api("/api/policies/triage2/discard", {});
 
   // records are data, not markup
@@ -298,4 +306,34 @@ test("review fixes: cases counted once, never taken from another version, stale 
   assert.deepEqual([c.version, c.ms, c.status], [0, 0, 200]);
   assert.ok((await api("/api/policies/triage2/calls?limit=0")).calls.length > 0);
   assert.equal((await api("/api/policies/triage2/calls?limit=-1")).calls.length, 1);
+});
+
+test("edits the newest call can't show survive a re-save; staging names what it stages; keeping decidus's text stays in its scope", () => {
+  const store = new Store(":memory:");
+  store.observe = 4;
+  const A = "Answer true if the customer wants a refund.", VIP = "Escalate VIP customers.", C = "Otherwise answer false.";
+  const rec = (ins, scope = "") => ({ url: "https://api.openai.com/v1/decisions", status: 200, scope, versions: {},
+    request: { model: "m", input: "hi", questions: [{ name: "q", type: "predicate", instructions: ins }] }, response: { answers: [{ name: "q", probability: 0.9 }] } });
+  for (let i = 0; i < 5; i++) ingest(store, rec(`${A} ${VIP} ${C}`), 0, 0);
+  edit(store, "q", "", { instructions: `${A} Escalate VIP and enterprise customers. ${C}` });
+  assert.equal(stage(store, "q", "", "live").n, 1);
+
+  // the VIP sentence is still in most calls, but not in the newest one: a no-change save keeps its edit
+  ingest(store, rec(`${A} ${C}`), 0, 0);
+  const d = edit(store, "q", "", { instructions: `${A} ${C} Be brief.` });
+  assert.deepEqual(d.ops.instructions.map(o => o.op), ["insert", "replace"]);
+  assert.equal(stage(store, "q", "", "canary", 10, "draft").n, 2);
+
+  // a new draft while v2 is on canary: updating the canary's share leaves the draft alone
+  edit(store, "q", "", { instructions: `${A} ${C} Be very brief.` });
+  assert.equal(stage(store, "q", "", "canary", 50, 2).n, 2);
+  assert.ok(store.variant("q", "").draft, "the draft is still a draft");
+  assert.equal(store.variant("q", "").candidate.pct, 50);
+  store.setDraft("q", "", null); store.setCandidate("q", "", null);
+
+  // acme's code rewrote the VIP sentence; keeping decidus's text there doesn't touch global
+  for (let i = 0; i < 4; i++) ingest(store, rec(`${A} Escalate VIP accounts quickly. ${C}`, "acme"), 0, 0);
+  const n = rebase(store, "q", "acme");
+  assert.deepEqual([store.effective("q", "acme"), store.effective("q", "zeta")], [{ n, from: "acme" }, { n: 1, from: "" }]);
+  assert.deepEqual(store.version("q", n).ops.instructions, [{ op: "replace", clause: "Escalate VIP accounts quickly.", text: "Escalate VIP and enterprise customers." }]);
 });
