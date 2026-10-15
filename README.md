@@ -11,7 +11,7 @@ Turn the decisions you review into the next policy you ship.
   </picture>
 </p>
 
-decidus records your model's choices and turns reviewed cases into a draft of the decision's text. Inspect the diff, replay it for an accuracy score, try it on a share of live traffic, and put it live without changing application code. One fetch wrapper connects to the SDK you already use.
+decidus records your model's choices and turns reviewed cases into a draft of the decision's text. Inspect the diff, replay it for an accuracy score, try it on a share of live traffic next to the version that runs, and put it live without changing application code. One fetch wrapper connects to the SDK you already use.
 
 Works with structured outputs and forced tool calls on OpenAI, Anthropic and Gemini, directly or through gateways such as LiteLLM and OpenRouter. Also supports the OpenAI Decisions API and TypeSafe Jev.
 
@@ -35,7 +35,7 @@ import * as decidus from "decidus";
 const openai = new OpenAI({ fetch: decidus.fetch() });
 ```
 
-Make a supported decision call, then open [localhost:7700](http://localhost:7700). **Calls** shows your recorded decisions; **Queue** brings forward cases to review.
+Make a supported decision call, then open [localhost:7700](http://localhost:7700). **Invocations** shows your recorded decisions; **To review** narrows them to the ones you haven't decided, least certain first.
 
 decidus discovers policies from your schema on the first call. There is nothing to register. The initial version, **v0**, is your code exactly as written. **Your text goes out as written until you put a version live.**
 
@@ -47,15 +47,15 @@ A **decision** picks from a fixed set of answers: which team should handle a con
 
 decidus connects the answers you review to the text that runs next:
 
-1. **Review real cases.** Open a case in **Queue**, inspect its input and output, and choose the right answer. Tick several options for a multi-select decision, or press ✓ to agree with the model. The model's own free text, such as a `reasoning` field, is in the output and goes to the writer with each case.
-2. **Generate a draft.** In **Decided**, select reviewed cases and click **Generate draft**. A model rewrites the decision's text from those cases, simplifying as it goes. Click **Diff** to see what it changes in the text your code sends, line by line, with the cases behind each change. Use **Edit** to write it yourself.
-3. **Replay for accuracy.** decidus sends the scope's decided cases (up to 300) to their recorded endpoint with the draft text and compares each result with the reviewer's answer: for example, **91% · 219 of 240**. Failing cases are a warning, never a block. **Auto-tune** revises the draft for cases that still fail, for up to three rounds.
-4. **Roll it out.** Click **Rollout…**, pick a strategy and a share of traffic:
-   - **Shadow** mirrors that share: the server re-runs those calls with the draft and records both answers. Calls where they diverge go to the queue. Your app always gets the live answer.
-   - **Canary** serves the draft to that share, sticky per `conversationId` (random per call without one).
+1. **Review real cases.** Open a case in **Invocations** (**To review** lists the undecided ones, least certain first), inspect its input and output, and choose the right answer. Tick several options for a multi-select decision, or press ✓ to agree with the model. The model's own free text, such as a `reasoning` field, is in the output and goes to the writer with each case.
+2. **Generate a draft.** In **Decided**, select reviewed cases and click **Generate draft**. A model rewrites the decision's text from those cases, simplifying as it goes. The policy pane shows the text as JSON: **Diff** colors what a version changes against the version it was built on, with the decided cases behind each change on the right, and **Tuneable** greys out what your code injects per call. Use **Edit** to write it yourself, and **Save as vN** to keep a draft as a version before it gets any traffic.
+3. **Replay for accuracy.** decidus sends the scope's decided cases (up to 300) to their recorded endpoint with a version's text and compares each result with the reviewer's answer: for example, **91% · 219 of 240**. Failing cases are a warning, never a block. **Auto-tune** revises the draft for cases that still fail, for up to three rounds; on a version, it first makes a draft from it.
+4. **Try it on live traffic.** Versions are listed like revisions, each with its share of traffic. Click a percentage to change it:
+   - **Traffic** is the share of conversations a version answers, sticky per `conversationId` (random per call without one). The live version keeps whatever the others don't take.
+   - **Shadow** is the share of calls a version also runs on: the server re-runs those calls with it and records both answers. Your app always gets the live answer.
 
-   **Diff** on the rollout's tab shows each version's answer distribution, divergence and human agreement. Then **Promote** or **Abort**.
-5. **Deploy.** **Deploy** (or **Promote**) ships the version: within 30 seconds, `decidus.fetch()` applies it to matching requests in every process. To roll back, open an older version's tab and click **Roll back**.
+   Several versions can be tried at once: each canary keeps its own slice of conversations, and each call is re-run by at most one shadow. Under each, decidus shows how often a shadow answered differently (click to see those calls) and how often it agrees with your decisions. A scope that inherits its parent's trials gets its own copy when you change one there.
+5. **Ship it.** Give a version 100% traffic: within 30 seconds, `decidus.fetch()` applies it to matching requests in every process. To roll back, give an older version 100%.
 
 **Copy** gives you any version as your newest call would send it, for example to move it into your code.
 
@@ -71,11 +71,9 @@ Objects such as an article card, arrays such as examples, option values, tool na
 
 ### Text that varies per call
 
-Much of a decision's text is built per call: an article, a customer's rule, a company's tag descriptions. decidus tells the two kinds apart by itself. For its first **20 calls in a scope** it only samples. After that, a clause is **static** when nearly every recent call in the scope sends it, and only static text is tuned. **Dynamic** text, which varies per call, shows in grey; the writer sees it as each case's context.
+Much of a decision's text is built per call: an article, a customer's profile, a company's tag descriptions. decidus tells the two kinds apart by itself, a sentence or line at a time. For its first **20 calls in a scope** it only samples. After that, a sentence is **tuneable** when nearly every recent call in the scope sends it, and only tuneable text is ever changed. Text your code injects per call is **locked**: **Tuneable** shows it greyed out with a lock, and the writer sees it as each case's context.
 
-This is per scope. A company's tag descriptions vary across companies, so they are dynamic for the global policy, but static and tunable in that company's scope.
-
-To freeze a static clause, open **Diff** (or **Lines**) above the text, hover the line and click the lock.
+This is per scope. A company's tag descriptions vary across companies, so they are locked for the global policy, but tuneable in that company's scope.
 
 ### When your code changes the text
 
@@ -170,24 +168,26 @@ Python support is next.
 
 ## Choose what to review
 
-**Queue** keeps review manageable as traffic grows. By default, a call is eligible when:
+**To review** keeps review manageable as traffic grows. By default, a call is eligible when:
 
 - The model is unsure: Decisions API or Jev confidence is below `0.80`, or a yes/no probability is between `0.20` and `0.80`.
 - It is one of the first 20 calls for its policy in its scope.
 - It falls in a 10% sample of the remaining calls. This helps surface confident mistakes and includes structured outputs and function calls, which do not report confidence.
 - Its answer could not be read.
 
-The queue shows **50 calls at a time**, rotating across answers, confidence bands, versions and scopes. Newer versions come first, with the newest calls first within each group. Each review brings in the next call.
+**To review** lists the eligible calls nobody decided yet, the least certain first: calls a shadow answered differently, then the model's own doubt (a yes/no probability closest to a coin flip, or the lowest confidence in its answer), then, for calls without a confidence, the answers people correct most often. Each decision moves you to the next call.
 
-**Calls** shows every recorded call, newest first. Search by message text, conversation, event or trace ID, or combine filters:
+**Invocations** shows every recorded call, newest first. Search by message text, conversation, event or trace ID, or combine filters:
 
 ```text
-answer:billing v:2 conf:<0.6 decided:no queue
+answer:billing v:2 conf:<0.6 decided:no differs:3
 ```
+
+`differs:3` lists the calls where v3, in shadow, answered differently.
 
 You can review any call from there. The overview shows calls per day and how often reviewers agreed with each version.
 
-**Review never blocks your app.** Queuing creates a copy of the call. It does not wait for a person or change the answer your code receives.
+**Review never blocks your app.** Recording a call for review creates a copy of it. It does not wait for a person or change the answer your code receives.
 
 ## Give customers or bots their own policies
 
@@ -202,7 +202,7 @@ await decidus.trace(
 
 Scopes are paths. A call uses the version set for its exact scope, then its parent, then the global policy. For example, `acme/support-bot` inherits from `acme` until you accept a version for that bot. A new company starts with the global policy.
 
-In the UI, choose a scope next to the policy name. The queue, reviewed decisions and calls narrow to that scope. Drafts, replays, shadow, canary and live use its cases and create a version for that scope only. Choose **Inherit instead** to remove its override and follow the parent again.
+In the UI, choose a scope next to the policy name. Invocations and decided cases narrow to that scope. Drafts, replays and traffic use its cases and create versions for that scope only. When a scope runs its own version, click **Inherit** under the versions to follow its parent again, including the parent's later versions.
 
 A client can also carry a fixed scope: `decidus.fetch({ scope: "acme" })`.
 
@@ -229,7 +229,7 @@ You can also pass the scope and IDs through your SDK's extra headers: `x-decidus
 
 `decidus.fetch()` runs in your app's process. It merges the live version into the decision's text, sends the request to your provider or gateway, and copies the request (as your code wrote it) and the response to the decidus server in the background. Your app's provider keys are never sent to decidus.
 
-The server serves the UI and stores calls, the queue and policy versions in one SQLite database.
+The server serves the UI and stores calls, decisions and policy versions in one SQLite database.
 
 ### Keys for drafts, replay and shadow
 
@@ -253,7 +253,7 @@ Other examples are `anthropic/claude-sonnet-5-5` and `gemini/gemini-3.8-flash`. 
 
 ### Share a server with your team
 
-A hosted version at [decidus.ai](https://decidus.ai) is on the way. To share one queue now, run the server where your team can reach it:
+A hosted version at [decidus.ai](https://decidus.ai) is on the way. To review together now, run the server where your team can reach it:
 
 ```sh
 DECIDUS_API_KEY=your-shared-key docker compose up -d
@@ -303,7 +303,7 @@ Records that cannot be delivered are dropped.
 | `DECIDUS_OBSERVE` | `20` | Calls sampled per scope to detect static vs dynamic text before tuning starts |
 | `DECIDUS_WARMUP` | `20` | Initial calls per policy and scope eligible for review |
 | `DECIDUS_SAMPLE_RATE` | `0.1` | Review sample rate after warmup |
-| `DECIDUS_QUEUE_SIZE` | `50` | Calls shown in the queue at a time |
+| `DECIDUS_QUEUE_SIZE` | `50` | Calls **To review** lists at a time |
 | `DECIDUS_MAX_CASES` | `40` | Maximum cases the writer sees at once, disagreements first |
 | `DECIDUS_REPLAY_CASES` | `300` | Maximum decided cases a version is replayed against |
 | `DECIDUS_GATEWAY_URL` | Unset | Gateway base URL for replay |
@@ -320,12 +320,12 @@ Run `npx decidus reset` to delete the local database. Databases from earlier ver
 | `1`–`9` | Choose an answer |
 | `Enter` | Agree with the model |
 | `x` | Select a case under **Decided** |
-| `/` | Search calls |
+| `/` | Search invocations |
 
-## Limits in 0.4
+## Limits in 0.5
 
-- Streamed decision calls receive the live policy, but are not recorded or queued.
-- Shadow and replay make real calls with the server's keys. Shadow skips calls when it falls behind.
+- Streamed decision calls receive the live policy, but are not recorded or reviewed.
+- Shadow and replay make real calls with the server's keys. Shadow skips calls when it falls behind; with several shadows, each call is re-run by at most one of them.
 - Replay authenticates to public provider APIs and one gateway. Direct replay to Azure OpenAI, Bedrock or Vertex is not supported yet; replay through a gateway is supported.
 - Fixed-choice fields inside arrays of objects are not recognized as decisions yet.
 - One server is one project. Everyone with its key can see every scope. Per-scope reviewer access is planned for the hosted version.

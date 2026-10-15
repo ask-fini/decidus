@@ -11,7 +11,7 @@ import OpenAI from "openai";
 import * as decidus from "../dist/index.js";
 import { createServer, ingest, parseFilter } from "../dist/server.js";
 import { Store } from "../dist/store.js";
-import { edit, rebase, stage, writer } from "../dist/loop.js";
+import { edit, rebase, save, stage, traffic, tune, writer } from "../dist/loop.js";
 import { prefixes, normScope, resolve } from "../dist/shapes.js";
 
 // ---------- mock provider: a "model" that only knows what the policy text tells it, plus writer endpoints ----------
@@ -185,19 +185,28 @@ const decisionRec = (choice, confidence, scope = "") => ({
   response: { answers: [{ type: "choice", name: "triage", choice, confidence }] },
 });
 
-test("the queue is a balanced window, not a log", () => {
+test("to review: shadow disagreements first, then the least certain, then answers people often correct", () => {
   const store = new Store(":memory:");
+  const c = [];
+  for (let i = 0; i < 2; i++) c.push(ingest(store, decisionRec("c", 0.7), 0, 0)[0]);
   for (let i = 0; i < 3; i++) ingest(store, decisionRec("b", 0.55), 0, 0);
-  for (let i = 0; i < 2; i++) ingest(store, decisionRec("c", 0.7), 0, 0);
-  for (let i = 0; i < 40; i++) ingest(store, decisionRec("a", 0.5), 0, 0);       // the newest 40 all say "a"
+  for (let i = 0; i < 40; i++) ingest(store, decisionRec("a", 0.5), 0, 0);
   for (let i = 0; i < 20; i++) ingest(store, decisionRec("a", 0.97), 0, 0);      // confident: not reviewable with sample 0
   assert.equal(store.tally("triage", "").queue, 45);
-  const q = store.queue("triage", "", 6);
-  assert.equal(q.length, 6);
-  assert.deepEqual(new Set(q.map(c => c.answer)), new Set(["a", "b", "c"]), "every answer shows up in the first six");
+  const q = store.review("triage", "", 45);
+  assert.deepEqual([q[0].confidence, q[40].confidence, q[43].confidence], [0.5, 0.55, 0.7], "a coin flip first, then less and less unsure");
+  store.setShadow(c[1], 2, "b", true);                                            // a shadow answered differently
+  assert.equal(store.review("triage", "", 1)[0].id, c[1]);
+  assert.deepEqual(parseFilter("differs:2").differs, 2);
+  assert.deepEqual(store.calls("triage", "", { differs: true }, null, 10).map(r => r.id), [c[1]]);
 
-  for (let i = 0; i < 50; i++) ingest(store, decisionRec("a", 0.97), 0, 1);      // sample everything: confident calls are reviewable too
-  assert.ok(store.queue("triage", "", 8).some(c => c.confidence === 0.97), "confident calls get their own band");
+  // no confidence: answers people correct more often come first
+  const none = (choice) => ({ ...decisionRec(choice, null), response: { answers: [{ type: "choice", name: "triage", choice }] } });
+  const s2 = new Store(":memory:");
+  const ids = [...Array(6)].map((_, i) => ingest(s2, none(i % 2 ? "x" : "y"), 99, 0)[0]);
+  s2.decide(ids[0], "x"); s2.decide(ids[2], "x");                                  // people corrected "y" twice
+  s2.decide(ids[1], "x");
+  assert.equal(s2.review("triage", "", 1)[0].answer, "y");
 });
 
 test("calls: filters and cursor paging", () => {
@@ -328,12 +337,92 @@ test("edits the newest call can't show survive a re-save; staging names what it 
   edit(store, "q", "", { instructions: `${A} ${C} Be very brief.` });
   assert.equal(stage(store, "q", "", "canary", 50, 2).n, 2);
   assert.ok(store.variant("q", "").draft, "the draft is still a draft");
-  assert.equal(store.variant("q", "").candidate.pct, 50);
-  store.setDraft("q", "", null); store.setCandidate("q", "", null);
+  assert.deepEqual(store.variant("q", "").candidates.map(c => [c.n, c.mode, c.pct]), [[2, "canary", 50]]);
+  store.setDraft("q", "", null); store.setCandidates("q", "", []);
 
   // acme's code rewrote the VIP sentence; keeping decidus's text there doesn't touch global
   for (let i = 0; i < 4; i++) ingest(store, rec(`${A} Escalate VIP accounts quickly. ${C}`, "acme"), 0, 0);
   const n = rebase(store, "q", "acme");
   assert.deepEqual([store.effective("q", "acme"), store.effective("q", "zeta")], [{ n, from: "acme" }, { n: 1, from: "" }]);
   assert.deepEqual(store.version("q", n).ops.instructions, [{ op: "replace", clause: "Escalate VIP accounts quickly.", text: "Escalate VIP and enterprise customers." }]);
+});
+
+test("several versions tried at once: canaries take slices of traffic, shadows slices of calls; a draft saves as a version", () => {
+  const store = new Store(":memory:");
+  store.observe = 2;
+  const rec = (ins) => ({ url: "https://api.openai.com/v1/decisions", status: 200, scope: "", versions: {},
+    request: { model: "m", input: "hi", questions: [{ name: "t", type: "predicate", instructions: ins }] }, response: { answers: [{ name: "t", probability: 0.9 }] } });
+  for (let i = 0; i < 3; i++) ingest(store, rec("Answer true for refunds. Otherwise false."), 0, 0);
+  const v = n => { edit(store, "t", "", { instructions: `Answer true for refunds. Otherwise false. Note ${n}.` }); return save(store, "t", ""); };
+  const [a, b, c] = [v(1), v(2), v(3)];
+  assert.deepEqual([a, b, c, store.variant("t", "").draft], [1, 2, 3, null], "saved drafts are versions with no traffic");
+  assert.equal(store.effective("t", "").n, 0);
+
+  traffic(store, "t", "", a, { traffic: 10 });
+  traffic(store, "t", "", b, { traffic: 20 });
+  traffic(store, "t", "", c, { shadow: 30 });
+  assert.deepEqual(store.variant("t", "").candidates.map(x => [x.n, x.mode, x.pct]), [[1, "canary", 10], [2, "canary", 20], [3, "shadow", 30]]);
+  assert.deepEqual(store.live().policies.t.canaries.map(x => [x.version, x.pct]), [[1, 10], [2, 20]]);
+  assert.throws(() => traffic(store, "t", "", c, { traffic: 80 }), /all traffic/);
+  assert.throws(() => traffic(store, "t", "", a, { shadow: 10 }), /already answers traffic/);
+
+  // the live version gives up share: the largest canary takes it; at 0 that canary is live
+  traffic(store, "t", "", 0, { traffic: 50 });
+  assert.deepEqual(store.variant("t", "").candidates.filter(x => x.mode === "canary").map(x => [x.n, x.pct]), [[1, 10], [2, 40]]);
+  traffic(store, "t", "", 0, { traffic: 0 });
+  assert.equal(store.effective("t", "").n, 2);
+  // 100% makes a version live: the other canaries stop, shadows keep comparing
+  traffic(store, "t", "", a, { traffic: 100 });
+  assert.equal(store.effective("t", "").n, 1);
+  assert.deepEqual(store.variant("t", "").candidates.map(x => [x.n, x.mode]), [[3, "shadow"]]);
+  assert.equal(store.version("t", 3).log.origin, "hand");
+});
+
+test("trials: inherited ones can be changed, each canary keeps its slice, the live version's share moves the largest canary, shadows only re-run live answers", async () => {
+  const store = new Store(":memory:");
+  store.observe = 2;
+  const rec = (ins, scope = "", versions = {}) => ({ url: "https://api.openai.com/v1/decisions", status: 200, scope, versions,
+    request: { model: "m", input: "hi", questions: [{ name: "u", type: "predicate", instructions: ins }] }, response: { answers: [{ name: "u", probability: 0.9 }] } });
+  for (let i = 0; i < 3; i++) ingest(store, rec("Answer true for refunds. Otherwise false."), 0, 0);
+  const v = n => { edit(store, "u", "", { instructions: `Answer true for refunds. Otherwise false. Note ${n}.` }); return save(store, "u", ""); };
+  const [a, b, c] = [v(1), v(2), v(3)];
+
+  // each canary owns its slice: adding, resizing or stopping one moves no other
+  traffic(store, "u", "", a, { traffic: 20 });
+  traffic(store, "u", "", b, { traffic: 10 });
+  const at = () => Object.fromEntries(store.variant("u", "").candidates.map(x => [x.n, [x.at, x.pct]]));
+  assert.deepEqual(at(), { [a]: [0, 20], [b]: [20, 10] });
+  traffic(store, "u", "", a, { traffic: 5 });
+  assert.deepEqual(at(), { [a]: [0, 5], [b]: [20, 10] });
+  traffic(store, "u", "", a, { traffic: 0 });
+  assert.deepEqual(at(), { [b]: [20, 10] });
+  assert.deepEqual(store.live().policies.u.canaries.map(x => [x.version, x.at, x.pct]), [[b, 20, 10]]);
+
+  // the live version's share goes up: the largest canary gives way first
+  traffic(store, "u", "", a, { traffic: 30 });
+  traffic(store, "u", "", 0, { traffic: 80 });
+  assert.deepEqual(store.variant("u", "").candidates.filter(x => x.mode === "canary").map(x => [x.n, x.pct]), [[b, 10], [a, 10]].sort((x, y) => x[0] - y[0]));
+
+  // acme inherits global's trials; changing one there gives acme its own copy, comparison clock and all
+  const since = store.variant("u", "").candidates.find(x => x.n === b).since;
+  traffic(store, "u", "acme", b, { traffic: 40 });
+  const own = store.variant("u", "acme").candidates;
+  assert.deepEqual(own.map(x => [x.n, x.pct]), [[a, 10], [b, 40]]);
+  assert.equal(own.find(x => x.n === b).since, since);
+  assert.deepEqual(store.variant("u", "").candidates.map(x => [x.n, x.pct]), [[a, 10], [b, 10]], "global is untouched");
+
+  // a version that goes live stops being tried, wherever the trial was set
+  traffic(store, "u", "", b, { traffic: 100 });
+  traffic(store, "u", "acme", 0, { traffic: 100 });
+  traffic(store, "u", "acme", c, { shadow: 100 });
+  assert.ok(store.candidatesFor("u", "zeta").every(x => x.n !== b));
+
+  // shadows only re-run calls the live version answered
+  traffic(store, "u", "acme", a, { traffic: 50 });
+  const pushed = [], fake = { push: (id, n) => pushed.push(n) };
+  ingest(store, rec("Answer true for refunds. Otherwise false.", "acme", { u: a }), 0, 0, fake);
+  ingest(store, rec("Answer true for refunds. Otherwise false.", "acme", { u: 0 }), 0, 0, fake);
+  assert.deepEqual(pushed, [c]);
+  edit(store, "u", "acme", { instructions: "Answer true for refunds. Otherwise false. Be brief." });
+  await assert.rejects(tune(store, "u", "acme", 3, a), /draft already/);
 });

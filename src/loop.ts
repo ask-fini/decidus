@@ -5,7 +5,7 @@
  */
 import { answers, apply, evidence, excerpt, only, prefixes, textParts, within, type Doc, type Route } from "./shapes.js";
 import { diff, rebase as rebaseOps, type Op } from "./clauses.js";
-import type { CaseRow, Draft, PolicyRow, ReplayResult, Store } from "./store.js";
+import type { Candidate, CaseRow, Draft, PolicyRow, ReplayResult, Store } from "./store.js";
 import { slots, staticKeys, templateOf, varying, view, type Template } from "./template.js";
 
 const env = (k: string) => process.env[k] || undefined;
@@ -238,7 +238,7 @@ export async function suggest(store: Store, name: string, scope: string, pick: {
   const { ops, changed } = toOps(t, base.ops, w);
   if (!changed.length) throw new Error("The writer changed nothing: the decided cases already agree with this text, or need a person.");
   const d: Draft = { base: eff.n, ops, keys: staticKeys(t), because: Object.fromEntries(changed.map(k => [k, w.because[k] ?? []])),
-    added: fresh.map(c => c.id), cases: cases.map(c => c.id), notes: w.notes, replay: null, tune: [], created_at: now() };
+    added: fresh.map(c => c.id), cases: cases.map(c => c.id), notes: w.notes, replay: null, tune: [], created_at: now(), origin: "generated" };
   store.setDraft(name, scope, d);
   return d;
 }
@@ -254,13 +254,13 @@ export function edit(store: Store, name: string, scope: string, parts: Record<st
   if (!d) {
     const eff = store.effective(name, scope);
     const base = store.version(name, eff.n)!;
-    d = { base: eff.n, ops: { ...base.ops }, keys: staticKeys(t), because: {}, added: [], cases: [], replay: null, tune: [], created_at: now() };
+    d = { base: eff.n, ops: { ...base.ops }, keys: staticKeys(t), because: {}, added: [], cases: [], replay: null, tune: [], created_at: now(), origin: "hand" };
   }
   const { ops, changed } = toOps(t, d.ops, { parts: parts ?? {}, because: {} });
   if (!changed.length) return store.variant(name, scope).draft;
   const because = { ...d.because };
   for (const k of changed) because[k] = [];
-  d = { ...d, ops, keys: staticKeys(t), because, replay: null, tune: [...d.tune, { round: d.tune.length + 1, pass: null, n: null, note: `Edited ${changed.join(", ")} by hand` }] };
+  d = { ...d, ops, keys: staticKeys(t), because, replay: null, origin: "hand", tune: [...d.tune, { round: d.tune.length + 1, pass: null, n: null, note: `Edited ${changed.join(", ")} by hand` }] };
   store.setDraft(name, scope, d);
   return d;
 }
@@ -330,9 +330,19 @@ export async function replay(store: Store, name: string, scope: string, target: 
 
 // ---------------- auto-tune ----------------
 
-export async function tune(store: Store, name: string, scope: string, rounds = 3): Promise<Draft> {
+export async function tune(store: Store, name: string, scope: string, rounds = 3, from?: number): Promise<Draft> {
   const p = need(store, name);
   const t = ready(store, name, scope);
+  // auto-tune a version: a draft from it first (there's no draft to tune yet)
+  let made = false;
+  if (from != null && store.variant(name, scope).draft) throw new Error("this scope has a draft already: tune that one, or save or discard it first");
+  if (from != null) {
+    const v = store.version(name, from);
+    if (!v || !prefixes(scope).includes(v.scope)) throw new Error(`v${from} isn't a version of ${scope || "global"} or above it`);
+    store.setDraft(name, scope, { base: v.n, ops: { ...v.ops }, keys: staticKeys(t), because: {}, added: [], cases: [], notes: undefined, replay: null, tune: [], created_at: now(), origin: "tuned" });
+    made = true;
+  }
+  try {
   let d = openDraft(store, name, scope);
   let results = d.replay ?? await replay(store, name, scope, "draft");
   const log = [...d.tune];
@@ -366,31 +376,124 @@ export async function tune(store: Store, name: string, scope: string, rounds = 3
       log.push({ round: log.length + 1, pass: passed(), n: results.length, note: "No rewording helps; the failing cases need a person" });
       break;
     }
+    made = false;
     const because = { ...d.because };
     for (const k of changed) because[k] = [...new Set([...(d.because[k] ?? []), ...(w.because[k] ?? [])])];
-    store.setDraft(name, scope, { ...d, ops, keys: staticKeys(t), because, notes: w.notes ?? d.notes, replay: null });
+    store.setDraft(name, scope, { ...d, ops, keys: staticKeys(t), because, notes: w.notes ?? d.notes, replay: null, origin: d.origin === "hand" ? "hand" : "tuned" });
     results = await replay(store, name, scope, "draft");
     log.push({ round: log.length + 1, pass: passed(), n: results.length,
       note: `Reworded ${changed.join(", ")}` + (passed() === results.length ? " · all cases pass" : "") });
     save();
   }
   save();
+  // a draft made from a version that tuning couldn't improve is just that version again
+  if (made) {
+    store.setDraft(name, scope, null);
+    const why = log.at(-1)?.note;
+    throw new Error(why && !/^No rewording/.test(why) ? `Auto-tune from v${from}: ${why}` : passed() === results.length
+      ? `v${from} already passes every decided case; nothing to tune.` : `Auto-tune found nothing that beats v${from} on its decided cases; the misses need a person.`);
+  }
   return openDraft(store, name, scope);
+  } catch (e) {
+    if (made) store.setDraft(name, scope, null);                       // don't leave a copy of the version behind
+    throw e;
+  }
 }
 
 // ---------------- stages: draft -> shadow / canary -> live ----------------
 
-/** The draft becomes the next version (not live yet). */
-function promote(store: Store, name: string, scope: string): number {
+/**
+ * The draft becomes the next version, with no traffic yet. Its edits are against the code's text, so it
+ * keeps whatever the scope runs now; `base` only records the version it was written from.
+ */
+export function save(store: Store, name: string, scope: string): number {
+  need(store, name);
   const d = openDraft(store, name, scope);
-  const eff = store.effective(name, scope);
-  if (d.base !== eff.n) throw new Error(`this scope now runs v${eff.n}, not v${d.base} as when this draft was written; write the draft again`);
   const n = store.nextVersion(name);
   store.addVersion({ policy: name, n, scope, base: d.base, ops: d.ops, keys: d.keys, because: d.because, cases: d.cases, replay: d.replay,
-    log: { notes: d.notes, tune: d.tune } });
+    log: { notes: d.notes, tune: d.tune, origin: d.origin ?? "generated" } });
   store.markUsed(d.added, n);
   store.setDraft(name, scope, null);
   return n;
+}
+
+const clamp = (p: unknown) => Math.max(0, Math.min(100, Number(p) || 0));
+const sum = (list: Candidate[]) => list.reduce((n, c) => n + c.pct, 0);
+/**
+ * Sets how much traffic a version gets, the way a revision's traffic is set: `traffic` is the share of
+ * conversations it answers (100 makes it live; the live version keeps whatever the canaries don't take);
+ * `shadow` is the share of calls it also runs on, answers only compared. Several versions can be tried at
+ * once: canaries take separate slices of conversations, shadows separate slices of calls.
+ */
+export function traffic(store: Store, name: string, scope: string, target: "draft" | number, set: { traffic?: number; shadow?: number }) {
+  need(store, name);
+  const v = store.variant(name, scope), fromDraft = target === "draft";
+  if (fromDraft && !v.draft) throw new Error("there's no draft to save");
+  const n = fromDraft ? store.nextVersion(name) : target as number;     // saved only once the change is valid
+  if (!fromDraft) {
+    const ver = store.version(name, n);
+    if (!ver || !prefixes(scope).includes(ver.scope)) throw new Error(`v${n} isn't a version of ${scope || "global"} or above it`);
+  }
+  const live = store.effective(name, scope).n;
+  // a scope that tries nothing of its own starts from what it inherits
+  const cur = (v.candidates.length || v.live != null ? v.candidates : store.candidatesFor(name, scope).map(({ scope: _, ...c }) => c)).filter(c => c.n !== live);
+  let others = cur.filter(c => c.n !== n), mine = cur.filter(c => c.n === n), next = live;
+  const since = (mode: Candidate["mode"]) => cur.find(c => c.n === n && c.mode === mode)?.since ?? now();   // a new share keeps the comparison going
+  if (set.traffic != null) {
+    const p = clamp(set.traffic), shadows = others.filter(c => c.mode === "shadow");
+    let canaries = others.filter(c => c.mode === "canary");
+    if (p >= 100) { next = n; canaries = []; mine = []; }               // the other canaries stop; shadows keep comparing
+    else if (n === live) {
+      // the live version's share changes: the canaries take up the difference, the largest first
+      if (!canaries.length) throw new Error(`give another version traffic first: v${n} is the only one serving`);
+      const cs = canaries.map(c => ({ ...c })).sort((x, y) => y.pct - x.pct);
+      if (p <= 0) { next = cs[0].n; cs.shift(); }
+      else {
+        let diff = 100 - p - sum(cs);
+        if (diff > 0) cs[0].pct += diff;
+        else for (const c of cs) { const take = Math.min(c.pct, -diff); c.pct -= take; diff += take; if (diff >= 0) break; }
+      }
+      canaries = cs.filter(c => c.pct > 0);
+      mine = [];
+    } else {
+      if (p > 0 && sum(canaries) + p >= 100) throw new Error(`the canaries would take all traffic; give v${n} 100% to make it live`);
+      mine = mine.filter(c => c.mode === "shadow" && p <= 0);          // a version answering traffic needs no shadow
+      if (p > 0) mine.push({ n, mode: "canary", pct: p, since: since("canary"), at: cur.find(c => c.n === n && c.mode === "canary")?.at });
+    }
+    others = [...shadows, ...canaries];
+  }
+  if (set.shadow != null) {
+    const p = clamp(set.shadow);
+    mine = mine.filter(c => c.mode !== "shadow");
+    if (p > 0) {
+      if (n === next || mine.some(c => c.mode === "canary")) throw new Error(`v${n} already answers traffic; a shadow is for a version that doesn't`);
+      if (sum(others.filter(c => c.mode === "shadow")) + p > 100) throw new Error("the shadows would cover more than all calls");
+      mine.push({ n, mode: "shadow", pct: p, since: since("shadow") });
+    }
+  }
+  const list = slices([...others, ...mine].filter(c => c.n !== next));
+  if (fromDraft && save(store, name, scope) !== n) throw new Error("the draft was saved as another version meanwhile; try again");
+  if (next !== live) store.setLive(name, scope, next);
+  store.setCandidates(name, scope, list);
+  return { n, live: next, candidates: store.variant(name, scope).candidates };
+}
+
+/**
+ * Each canary keeps its own slice of the 0-100 conversation buckets (`at`), so changing one canary never
+ * moves conversations on another. A canary that no longer fits where it was moves to the first free gap.
+ */
+function slices(list: Candidate[]): Candidate[] {
+  const canaries = list.filter(c => c.mode === "canary").sort((a, b) => a.since.localeCompare(b.since)), taken: [number, number][] = [];
+  const free = (a: number, p: number) => a >= 0 && a + p <= 100 + 1e-9 && taken.every(([x, y]) => a + p <= x + 1e-9 || a >= y - 1e-9);
+  const placed = new Map<Candidate, number>();
+  for (const c of canaries) if (c.at != null && free(c.at, c.pct)) { placed.set(c, c.at); taken.push([c.at, c.at + c.pct]); }
+  for (const c of canaries) {
+    if (placed.has(c)) continue;
+    const at = [0, ...taken.map(([, y]) => y)].sort((x, y) => x - y).find(a => free(a, c.pct));
+    if (at == null) { let a = 0; for (const x of canaries) { placed.set(x, a); a += x.pct; } break; }   // no gap fits: pack them again
+    placed.set(c, at); taken.push([at, at + c.pct]);
+  }
+  return list.map(c => (c.mode === "canary" ? { ...c, at: Math.round(placed.get(c)! * 1000) / 1000 } : c));
 }
 
 /**
@@ -400,23 +503,14 @@ function promote(store: Store, name: string, scope: string): number {
 export function stage(store: Store, name: string, scope: string, mode: "shadow" | "canary" | "live", pct?: number, target?: "draft" | number): { n: number; mode: string } {
   need(store, name);
   const v = store.variant(name, scope);
-  let n: number | undefined;
-  if (target === "draft" || (target == null && v.draft)) n = promote(store, name, scope);
-  else {
-    n = target ?? v.candidate?.n;
-    const ver = n == null ? null : store.version(name, n);
-    if (n != null && (!ver || !prefixes(scope).includes(ver.scope))) throw new Error(`v${n} isn't a version of ${scope || "global"} or above it`);
-  }
-  if (n == null) throw new Error("nothing to stage: write a draft first");
-  if (mode === "live") {
-    store.setLive(name, scope, n);
-    store.setCandidate(name, scope, null);
-    return { n, mode };
-  }
+  const t = target ?? (v.draft ? "draft" : v.candidates.at(-1)?.n);
+  if (t == null) throw new Error("nothing to stage: write a draft first");
   const share = Math.max(0.1, Math.min(100, Number(pct) || 10));
-  const same = v.candidate && v.candidate.n === n && v.candidate.mode === mode;
-  store.setCandidate(name, scope, { n, mode, pct: share, since: same ? v.candidate!.since : now() });
-  return { n, mode };
+  const r = mode === "live" ? traffic(store, name, scope, t, { traffic: 100 })
+    : mode === "canary" ? traffic(store, name, scope, t, { traffic: share, shadow: 0 })
+    : traffic(store, name, scope, t, t === store.effective(name, scope).n ? { shadow: share } : { traffic: 0, shadow: share });
+  if (mode === "live") store.setCandidates(name, scope, []);           // as in 0.4: going live ends every trial in the scope
+  return { n: r.n, mode };
 }
 
 // ---------------- shadow: re-run a share of calls with the candidate ----------------
@@ -488,7 +582,7 @@ export function rebase(store: Store, name: string, scope: string): number {
   }
   const n = store.nextVersion(name);
   store.addVersion({ policy: name, n, scope, base: eff.n, ops, keys: staticKeys(t), because: {}, cases: v.cases, replay: null,
-    log: { notes: `v${eff.n}'s text, kept on top of the code's new text`, tune: [], rebased: eff.n } });
+    log: { notes: `v${eff.n}'s text, kept on top of the code's new text`, tune: [], rebased: eff.n, origin: "rebased" } });
   store.setLive(name, scope, n);
   return n;
 }

@@ -218,3 +218,15 @@ test("clauses: a multi-line insert keeps its lines; text can go before a leading
   assert.deepEqual(ops, [{ op: "insert", after: null, before: null, start: true, text: "Be strict." }]);
   assert.equal(patch("Article two. Answer true if late.", ops).text, "Be strict. Article two. Answer true if late.");
 });
+
+test("deleting the last clause of a paragraph keeps the paragraph break", async () => {
+  const { patch } = await import("../dist/clauses.js");
+  const text = "Pick one. Old note.\n\nCustomer: Maya.\nOptions: A; B.";
+  assert.equal(patch(text, [{ op: "delete", clause: "Old note." }]).text, "Pick one.\n\nCustomer: Maya.\nOptions: A; B.");
+  // a replaced clause keeps its own place
+  assert.equal(patch(text, [{ op: "replace", clause: "Old note.", text: "New note." }]).text, "Pick one. New note.\n\nCustomer: Maya.\nOptions: A; B.");
+  // so does text inserted after it
+  assert.equal(patch(text, [{ op: "delete", clause: "Old note." }, { op: "insert", after: "Old note.", before: null, text: "Ignore greetings." }]).text, "Pick one. Ignore greetings.\n\nCustomer: Maya.\nOptions: A; B.");
+  // a list's last line: the blank line before the next paragraph stays
+  assert.equal(patch("Rules:\n- a.\n- Old rule.\n\nOtherwise no.", [{ op: "delete", clause: "- Old rule." }]).text, "Rules:\n- a.\n\nOtherwise no.");
+});

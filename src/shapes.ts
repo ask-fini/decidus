@@ -20,7 +20,9 @@ export type { Doc, Op } from "./clauses.js";
 export type Route = "decisions" | "systemone" | "chat" | "responses" | "anthropic" | "gemini";
 export type Kind = "bool" | "category" | "scale" | "multi";
 /** What a call runs: a version's edits, and maybe a candidate version served to a share of calls. */
-export interface LivePolicy { version: number; ops: Doc; canary?: { version: number; ops: Doc; pct: number } }
+export interface Canary { version: number; ops: Doc; pct: number; /** the start of its slice of conversation buckets */ at?: number }
+/** What a scope runs: the live version, and canaries each served to pct% of conversations (in order, by bucket). */
+export interface LivePolicy { version: number; ops: Doc; canaries?: Canary[]; /** before 0.5: one */ canary?: Canary }
 /** What GET /v1/policies returns: the global live versions, and per-scope overrides. */
 export interface LiveSet { policies: Record<string, LivePolicy>; scopes?: Record<string, Record<string, LivePolicy>> }
 

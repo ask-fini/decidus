@@ -1,6 +1,6 @@
 {
   "name": "decidus",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "The policy loop for decision models: people decide what the model couldn't, decidus rewrites the decision's text, replays it for accuracy and tries it in shadow or canary before it goes live. Structured outputs, tool calls, OpenAI Decisions and Jev, direct or through a gateway.",
   "license": "MIT",
   "homepage": "https://decidus.ai",

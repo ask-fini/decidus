@@ -2,7 +2,7 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { apply, decided, evidence, headline, multi, normScope, only, prefixes, routeOf, textParts, type Rename, type Route } from "./shapes.js";
 import { Store, type CallFilter } from "./store.js";
-import { edit, rebase, replay, retired, Shadow, stage, suggest, tune } from "./loop.js";
+import { edit, rebase, replay, retired, save, Shadow, stage, suggest, traffic, tune } from "./loop.js";
 import { forget, templateOf, varying, view } from "./template.js";
 
 export interface ServeOptions {
@@ -16,7 +16,7 @@ export interface ServeOptions {
   sample?: number;
   /** Calls a scope needs before decidus tells static text from dynamic and may tune it. Default 20. */
   observe?: number;
-  /** How many calls the queue shows at a time. Default 50. */
+  /** How many calls "to review" lists at a time. Default 50. */
   queueSize?: number;
   /** Days to keep the bodies of calls nobody decided. Default 30; 0 keeps them forever. */
   retentionDays?: number;
@@ -26,7 +26,7 @@ export interface ServeOptions {
 /**
  * Reviewable ("eligible") calls: every call the model was unsure about, the first `warmup` of each
  * scope, and a `sample` of the rest, so confident mistakes and calls with no confidence show up too.
- * The queue then shows a balanced window over them.
+ * "To review" lists the undecided ones, the least certain first.
  */
 function eligible(store: Store, policy: string, scope: string, a: { value: string | null; confidence: number | null; certain: boolean }, warmup: number, sample: number) {
   if (a.value == null) return true;
@@ -63,8 +63,13 @@ export function ingest(store: Store, rec: any, warmup = 20, sample = 0.1, shadow
       url: rec.url, headers: rec.headers ?? {}, request: rec.request, response: rec.response,
     });
     ids.push(id);
-    const c = shadow && status < 400 ? store.candidateFor(s.name, scope) : null;
-    if (c?.mode === "shadow" && c.n !== version && Math.random() * 100 < c.pct) shadow!.push(id, c.n);
+    // shadows take separate slices of calls: a call is re-run with at most one of them
+    // and only calls the live version answered: a canary's answers are compared on their own
+    const shadows = shadow && status < 400 && version === store.effective(s.name, scope).n ? store.candidatesFor(s.name, scope).filter(c => c.mode === "shadow") : [];
+    if (shadows.length) {
+      const r = Math.random() * 100; let at = 0;
+      for (const c of shadows) { at += c.pct; if (r < at) { shadow!.push(id, c.n); break; } }
+    }
   }
   return ids;
 }
@@ -81,8 +86,8 @@ function overview(store: Store) {
       name: p.name, kind: p.kind, route: p.route, model: p.model, instructions: p.instructions, live, ready: templateOf(store, p.name, "").ready,
       overrides: variants.filter(v => v.scope && v.live != null).length,
       drafts: variants.filter(v => v.draft).length,
-      candidate: g?.candidate ?? null,
-      candidates: variants.filter(v => v.candidate).length,
+      candidates: g?.candidates ?? [],
+      trying: variants.filter(v => v.candidates.length).length,
       calls: t.calls, queue: t.queue, unprocessed: t.unprocessed,
       replay: accuracy(store.version(p.name, live)?.replay),
       agreement: Object.entries(store.agreement(p.name, "")).map(([v, a]) => ({ v: Number(v), ...a })).sort((a, b) => a.v - b.v),
@@ -98,21 +103,22 @@ function detail(store: Store, name: string, scope: string, queueSize: number) {
   const v = store.variant(name, scope);
   const eff = store.effective(name, scope);
   const t = templateOf(store, name, scope);
-  const cand = store.candidateFor(name, scope);
+  const cands = store.candidatesFor(name, scope).map(c => ({ ...c, compare: { ...store.compare(name, c.scope, eff.n, c),
+    replay: { live: accuracy(store.version(name, eff.n)?.replay), candidate: accuracy(store.version(name, c.n)?.replay) } } }));
   const versions = store.versions(name).filter(x => lineage.has(x.scope));
   return {
     policy: p, scope, effective: eff, own: v.live, draft: v.draft,
+    parent: scope ? store.effective(name, prefixes(scope)[1]) : null,      // what this scope would run if it inherited
     template: { ready: t.ready, seen: t.seen, need: t.need, parts: t.parts.map(x => ({ part: x.part,
       static: x.clauses.filter(c => c.key && !c.dyn).length, dynamic: x.clauses.filter(c => c.dyn).length, locked: x.clauses.filter(c => c.locked).length })) },
-    candidate: cand,
-    compare: cand ? { ...store.compare(name, cand.scope, eff.n, cand),
-      replay: { live: accuracy(store.version(name, eff.n)?.replay), candidate: accuracy(store.version(name, cand.n)?.replay) } } : null,
+    candidates: cands.map(({ compare, ...c }) => c),
+    compare: Object.fromEntries(cands.map(c => [c.n, c.compare])),
     retired: retired(store, name, scope),
     versions: versions.map(({ keys, ...x }) => ({ ...x, edits: Object.values(x.ops).reduce((n, o) => n + o.length, 0) })),
     scopes: store.scopes(name),
-    overrides: store.variants(name).filter(x => x.scope).map(x => ({ scope: x.scope, live: x.live, draft: !!x.draft, candidate: x.candidate })),
+    overrides: store.variants(name).filter(x => x.scope).map(x => ({ scope: x.scope, live: x.live, draft: !!x.draft, candidates: x.candidates })),
     tally: store.tally(name, scope),
-    queue: store.queue(name, scope, queueSize),
+    queue: store.review(name, scope, queueSize),
     unprocessed: store.unprocessed(name, scope, 500),
     processed: store.processed(name, scope, 300),
     agreement: store.agreement(name, scope),
@@ -121,7 +127,7 @@ function detail(store: Store, name: string, scope: string, queueSize: number) {
   };
 }
 
-/** `answer:billing v:2 conf:<0.6 decided:no queue conv_8f2c1` */
+/** `answer:billing v:2 conf:<0.6 decided:no queue differs:3 conv_8f2c1` */
 export function parseFilter(q: string): CallFilter {
   const f: CallFilter = {}, words: string[] = [];
   for (const tok of q.trim().split(/\s+/).filter(Boolean)) {
@@ -132,6 +138,8 @@ export function parseFilter(q: string): CallFilter {
     else if (m && k === "decided") f.decided = v === "no" ? "no" : "yes";
     else if (m && k === "conf") { const c = v.match(/^([<>]=?)?(\d*\.?\d+)$/); if (c) c[1]?.startsWith(">") ? (f.minConf = +c[2]) : (f.maxConf = +c[2]); }
     else if (!m && (k === "queue" || k === "queued")) f.queued = true;
+    else if (!m && (k === "differs" || k === "differ")) f.differs = true;
+    else if (m && (k === "differs" || k === "differ")) f.differs = Number(v.replace(/^v/, ""));
     else words.push(tok);
   }
   if (words.length) f.text = words.join(" ");
@@ -220,8 +228,21 @@ export function createServer(opts: ServeOptions = {}) {
         if (!ops) return send(404, { error: "no such version" });
         return send(200, { ...view(t, ops), ready: t.ready, seen: t.seen, need: t.need, sample: t.sample });
       }
+      if (req.method === "GET" && (r = m(/^\/api\/policies\/([^/]+)\/texts$/))) {
+        // several versions (and the draft) merged into the text the code sends now, for diffs and blame
+        const name = decodeURIComponent(r[1]);
+        if (!store.policy(name)) return send(404, { error: "no such policy" });
+        const t = templateOf(store, name, scope), out: Record<string, unknown> = {};
+        for (const k of (url.searchParams.get("v") ?? "").split(",").filter(Boolean).slice(0, 200)) {
+          const ops = k === "draft" ? store.variant(name, scope).draft?.ops : store.version(name, Number(k))?.ops;
+          if (ops) out[k] = view(t, ops);
+        }
+        return send(200, { texts: out, ready: t.ready, seen: t.seen, need: t.need, sample: t.sample });
+      }
       if (req.method === "GET" && (r = m(/^\/api\/policies\/([^/]+)\/calls$/))) {
         const limit = Math.max(1, Math.min(500, Math.trunc(Number(url.searchParams.get("limit"))) || 100));
+        if (url.searchParams.get("review")) return send(200, { calls: store.review(decodeURIComponent(r[1]), scope,
+          url.searchParams.has("limit") ? limit : queueSize, parseFilter(url.searchParams.get("q") ?? "")), next: null });
         const rows = store.calls(decodeURIComponent(r[1]), scope, parseFilter(url.searchParams.get("q") ?? ""),
           Number(url.searchParams.get("before")) || null, limit) as any[];
         return send(200, { calls: rows, next: rows.length === limit ? rows.at(-1).id : null });
@@ -234,7 +255,7 @@ export function createServer(opts: ServeOptions = {}) {
         store.decide(Number(r[1]), Array.isArray(body.value) ? multi(body.value) : body.value == null ? null : String(body.value));
         return send(200, { ok: true });
       }
-      if (req.method === "POST" && (r = m(/^\/api\/policies\/([^/]+)\/(suggest|edit|replay|tune|discard|stage|stop|live|rebase|lock)$/))) {
+      if (req.method === "POST" && (r = m(/^\/api\/policies\/([^/]+)\/(suggest|edit|replay|tune|discard|save|traffic|stage|stop|live|rebase|lock)$/))) {
         const name = decodeURIComponent(r[1]);
         if (!store.policy(name)) return send(404, { error: "no such policy" });
         cached = null;
@@ -242,14 +263,25 @@ export function createServer(opts: ServeOptions = {}) {
           case "suggest": return send(200, await suggest(store, name, scope, { cases: body.cases, all: !!body.all }));
           case "edit": return send(200, edit(store, name, scope, body.parts ?? {}, Number.isFinite(Number(body.sample)) && body.sample != null ? Number(body.sample) : undefined));
           case "replay": return send(200, await replay(store, name, scope, body.target === "draft" || body.target == null ? "draft" : Number(body.target)));
-          case "tune": return send(200, await tune(store, name, scope));
+          case "tune": return send(200, await tune(store, name, scope, 3, body.from == null ? undefined : Number(body.from)));
           case "discard": store.setDraft(name, scope, null); return send(200, { ok: true });
+          case "save": return send(200, { n: save(store, name, scope) });
+          case "traffic": {
+            if (body.version == null) return send(400, { error: "version is a version number, or \"draft\"" });
+            const pct = (x: unknown) => (x == null ? undefined : Number(x));
+            return send(200, traffic(store, name, scope, body.version === "draft" ? "draft" : Number(body.version), { traffic: pct(body.traffic), shadow: pct(body.shadow) }));
+          }
           case "stage": {
             if (!["shadow", "canary", "live"].includes(body.mode)) return send(400, { error: "mode is shadow, canary or live" });
             const target = body.target === "draft" ? "draft" : body.target == null ? undefined : Number(body.target);
             return send(200, stage(store, name, scope, body.mode, body.pct, target));
           }
-          case "stop": store.setCandidate(name, scope, null); return send(200, { ok: true });
+          case "stop": {                     // one version's trial, or all of the scope's
+            const v = store.variant(name, scope);
+            const cur = v.candidates.length || v.live != null ? v.candidates : store.candidatesFor(name, scope).map(({ scope: _, ...c }) => c);
+            store.setCandidates(name, scope, body.version == null ? [] : cur.filter(c => c.n !== Number(body.version)));
+            return send(200, { ok: true });
+          }
           case "rebase": return send(200, { live: rebase(store, name, scope) });
           case "lock": {
             const v = store.variant(name, scope), part = String(body.part ?? ""), k = String(body.key ?? "");

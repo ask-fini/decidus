@@ -92,7 +92,15 @@ export function weave(text: string, ops: Op[]): { units: Unit[]; retired: number
 export function join(units: Unit[], original: string): string {
   const seps = split(original).map(c => c.slice(core(c).length)).filter(Boolean);
   const dflt = seps.some(s => s.includes("\n")) && seps.filter(s => s.includes("\n")).length * 2 >= seps.length ? "\n" : " ";
-  const vis = units.filter(u => u.kind !== "del");
+  // a deleted clause that ended a paragraph hands its break to the clause before it, so paragraphs stay apart
+  const vis: Unit[] = [];
+  units.forEach((u, i) => {
+    if (u.kind !== "del") return void vis.push({ ...u });
+    const last = vis[vis.length - 1], next = units[i + 1];
+    // text written in its place (a replacement, or an insert after it) carries the break itself
+    const breaks = (x: string) => (x.match(/\n/g) ?? []).length;
+    if (last && next?.kind !== "add" && breaks(u.sep ?? "") > breaks(last.sep ?? "")) last.sep = u.sep;
+  });
   const trail = original.slice(core(original).length);
   return vis.map((u, j) => u.text + (j === vis.length - 1 ? trail : u.sep || dflt)).join("");
 }

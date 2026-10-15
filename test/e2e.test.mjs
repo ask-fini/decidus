@@ -202,22 +202,25 @@ test("shadow: the candidate re-runs calls on the side; where it disagrees the ca
   await until(async () => (await api(P("/calls"))).calls.filter(c => c.shadow_version === 3).length >= 3);
   await shadow.idle();
   const d = await api(P());
-  assert.equal(d.candidate.mode, "shadow");
-  assert.equal(d.compare.live.n, 2);
-  assert.ok(d.compare.paired.n >= 3 && d.compare.paired.differ >= 2, "crash tickets: live says technical, the candidate billing");
+  assert.deepEqual(d.candidates.map(c => [c.n, c.mode]), [[3, "shadow"]]);
+  assert.equal(d.compare[3].live.n, 2);
+  assert.ok(d.compare[3].paired.n >= 3 && d.compare[3].paired.differ >= 2, "crash tickets: live says technical, the candidate billing");
+  assert.ok((await api(P("/calls?q=differs:3"))).calls.length >= 2, "the calls it answered differently, as a filter");
   const crash = (await api(P("/calls?q=crashes"))).calls.find(c => c.shadow_version === 3);
   assert.deepEqual([crash.answer, crash.shadow_answer, crash.escalated], ["technical", "billing", 1]);
   await api(`/api/cases/${crash.id}/decide`, { value: "technical" });
-  assert.deepEqual((await api(P())).compare.candidate.reviewed, { n: 1, agree: 0 });
+  assert.deepEqual((await api(P())).compare[3].candidate.reviewed, { n: 1, agree: 0 });
+  const top = (await api(P("/calls?review=1"))).calls[0];
+  assert.deepEqual([top.shadow_version, top.answer !== top.shadow_answer], [3, true], "to review: where the shadow disagreed comes first");
   await api(P("/stop"), {});
-  assert.equal((await api(P())).candidate, null);
+  assert.deepEqual((await api(P())).candidates, []);
 });
 
 test("canary: the candidate is served to a share of calls, the same version for the whole conversation", async () => {
   const live = await api(P("/view?v=live"));
   await api(P("/edit"), { parts: { description: live.edit.description + " Ask for the order number when unsure." } });
   assert.deepEqual(await api(P("/stage"), { mode: "canary", pct: 50 }), { n: 4, mode: "canary" });
-  assert.deepEqual((await api("/v1/policies")).policies["route_conversation.team"].canary.pct, 50);
+  assert.deepEqual((await api("/v1/policies")).policies["route_conversation.team"].canaries.map(c => [c.version, c.pct]), [[4, 50]]);
   await fresh();
   const sent = [];
   for (let i = 0; i < 12; i++) {
@@ -229,14 +232,34 @@ test("canary: the candidate is served to a share of calls, the same version for 
   const calls = await until(async () => { const c = (await api(P("/calls?q=v:4"))).calls; return c.length && c; });
   assert.ok(calls.length >= 3 && calls.length <= 9);
   const d = await api(P());
-  assert.ok(d.compare.candidate.answers.shipping >= 3);
+  assert.ok(d.compare[4].candidate.answers.shipping >= 3);
 
   await api(P("/stage"), { mode: "live" });
   const after = await api(P());
-  assert.deepEqual([after.effective.n, after.candidate], [4, null]);
+  assert.deepEqual([after.effective.n, after.candidates], [4, []]);
   // rollback is one click: any earlier version can go live again
   await api(P("/live"), { version: 2 });
   assert.equal((await api(P())).effective.n, 2);
+});
+
+test("auto-tune from a version, save a draft as a version, set traffic per version, read several texts at once", async () => {
+  // v2 passes its decided cases: nothing to tune, and no draft left behind
+  await assert.rejects(api(P("/tune"), { from: 2 }), /v2 already passes every decided case|nothing that beats v2/);
+  assert.equal((await api(P())).draft, null);
+  const live = await api(P("/view?v=live"));
+  await api(P("/edit"), { parts: { description: live.edit.description + " Be brief." } });
+  const { n } = await api(P("/save"), {});
+  let d = await api(P());
+  assert.deepEqual([d.draft, d.effective.n, d.versions.at(-1).n, d.versions.at(-1).log.origin], [null, 2, n, "hand"], "saved, with no traffic");
+  assert.deepEqual((await api(P("/traffic"), { version: n, shadow: 20 })).candidates.map(c => [c.n, c.mode, c.pct]), [[n, "shadow", 20]]);
+  await api(P("/traffic"), { version: n, traffic: 10 });
+  d = await api(P());
+  assert.deepEqual(d.candidates.map(c => [c.n, c.mode, c.pct]), [[n, "canary", 10]], "a canary needs no shadow");
+  const t = await api(P(`/texts?v=0,2,${n},draft`));
+  assert.deepEqual(Object.keys(t.texts), ["0", "2", String(n)]);
+  assert.ok(t.texts[String(n)].merged.description.endsWith("Be brief."));
+  await api(P("/stop"), { version: n });
+  assert.deepEqual((await api(P())).candidates, []);
 });
 
 test("Anthropic forced tool with a boolean field becomes a bool policy", async () => {

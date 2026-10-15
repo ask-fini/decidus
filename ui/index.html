@@ -13,6 +13,7 @@
   --rust:#9A4829;--pass:#2F6B4A;--pass-tint:#E3EFE7;--fail:#A63D2A;--fail-tint:#F5E4DF;
   --add:#E6EEF3;--del:#F6E9E5;
   --jk:#1F6096;--str:#2E6B45;--num:#9A4829;--lit:#6B4FA0;
+  --idle:#9AA0A6;--hatch:rgba(27,30,33,.065);
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 }
@@ -24,6 +25,7 @@
   --rust:#DB8F6E;--pass:#74BD92;--pass-tint:#1C2C23;--fail:#E88E78;--fail-tint:#33211C;
   --add:rgba(134,179,211,.10);--del:rgba(232,142,120,.10);
   --jk:#8CC0EA;--str:#9ED0AE;--num:#DB8F6E;--lit:#B9A3E0;
+  --idle:#6C747B;--hatch:rgba(255,255,255,.07);
 }}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -153,20 +155,7 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 .jl{display:block;font:12.5px/21px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
 .jl .k0{color:var(--ink);font-weight:500}.jl .k{color:var(--jk)}.jl .s{color:var(--str)}.jl .n{color:var(--num)}.jl .b{color:var(--lit)}.jl .pn{color:var(--ink3)}
 
-.ep{display:flex;flex-wrap:wrap;gap:4px 10px;padding:10px 16px 0;font:12px var(--mono);color:var(--ink3)}
-.ep b{font-weight:500;color:var(--ink2)}
 .code{font:12.5px/22px var(--mono);padding-block:10px}
-.ln{display:grid;grid-template-columns:36px 14px minmax(0,1fr) auto;align-items:start;padding-right:14px}
-.ln.add,.ln.mix{background:var(--add)}
-.ln.cut{background:var(--del)}
-.no{text-align:right;padding-right:10px;color:var(--ink3);user-select:none}
-.mk{color:var(--accent);user-select:none}
-.ln.cut .mk,.ln.mix .mk{color:var(--fail)}
-.src{white-space:pre-wrap;overflow-wrap:anywhere}
-.src .k{color:var(--jk)}.src .s{color:var(--str)}.src .p{color:var(--ink3)}.src .b{color:var(--lit)}
-.src .rm{color:var(--ink3);text-decoration:line-through;text-decoration-color:var(--fail)}
-.src .in{background:var(--accent-tint);color:var(--accent);border-radius:3px}
-.refs{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:3px;padding:2px 0 2px 10px;max-width:120px}
 .ref{font:500 11px/16px var(--mono);padding:0 5px;border-radius:4px;border:1px solid var(--line);background:var(--surface);color:var(--accent);cursor:pointer}
 .edit{display:flex;flex-direction:column;gap:12px;padding:12px 16px}
 .edit label{display:flex;flex-direction:column;gap:4px;font:12px var(--mono);color:var(--jk)}
@@ -191,44 +180,10 @@ pre.code{margin:12px 0 0;padding:14px 16px;border-radius:8px;background:var(--su
 .tlog{list-style:none;margin:0;padding:10px 0 0;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px}
 .tlog li{display:grid;grid-template-columns:18px 48px minmax(0,1fr);gap:8px;font-size:12px;line-height:18px;color:var(--ink2)}
 
-/* 0.4: text that varies per call, locks, trying a draft on traffic */
-.src .vary{color:var(--ink3)}
-/* the diff, in a modal: one clause per line */
-dialog.diff{width:min(920px,calc(100vw - 32px));max-height:86vh;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 24px 64px rgba(0,0,0,.18)}
-dialog.diff::backdrop{background:rgba(20,22,24,.32)}
-.dh{position:sticky;top:0;z-index:1;display:flex;align-items:baseline;gap:10px;padding:16px 20px 14px;border-bottom:1px solid var(--line2);background:var(--surface)}
-.dh b{font-weight:600}
-.dh .x{margin-left:auto;align-self:center;width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:var(--ink2);font-size:18px;line-height:1;cursor:pointer}
-.dh .x:hover{background:var(--sunken)}
-.db{padding:4px 0 20px}
-.dlive{margin:14px 20px 0;font:12px/19px var(--mono);color:var(--ink2)}
-.dpart{margin-top:18px}
-.dpart h4{display:flex;gap:10px;align-items:baseline;margin:0;padding:0 20px 6px;font:500 12.5px var(--mono);color:var(--jk)}
-.dpart h4 .muted{font-weight:400}
-.dpart h4 .refs{margin-left:auto;max-width:none;padding:0}
-.dl{display:grid;grid-template-columns:32px minmax(0,1fr) 44px 30px;align-items:start;font:12.5px/22px var(--mono)}
-.dl .m{text-align:center;color:var(--ink3);user-select:none}
-.dl .t{white-space:pre-wrap;overflow-wrap:anywhere;padding-right:8px}
-.dl .c{text-align:right;color:var(--ink3);font-size:11.5px}
-.dl.add{background:var(--pass-tint)}.dl.add .m{color:var(--pass)}
-.dl.cut{background:var(--fail-tint)}.dl.cut .m{color:var(--fail)}.dl.cut .t{color:var(--ink2)}
-.dnote{margin:14px 20px 0;font-size:13px;line-height:1.5;color:var(--ink2)}
-.dl.var .t{color:var(--ink3)}
-.dl .lk{opacity:0;justify-self:center;width:22px;height:22px;border:0;border-radius:5px;background:transparent;color:var(--ink3);display:grid;place-items:center;padding:0;cursor:pointer}
-.dl:hover .lk,.dl .lk.on,.dl .lk:focus-visible{opacity:1}
-.dl .lk:hover{background:var(--sunken);color:var(--ink)}
-.dl .lk.on{color:var(--ink)}
-.dl .lk svg{width:11px;height:11px}
-.dl.gap{cursor:pointer;color:var(--ink3);font-size:12px}
-.dl.gap:hover{background:var(--sunken)}
-.dfoot{padding:16px 20px 0;font-size:12px;color:var(--ink3)}
 .notes.warn{color:var(--rust)}
 .ph+.notes,.ph+.err+.notes{margin-top:12px}
 .notes .linkbtn{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .notes .mono{font-size:12px}
-.try{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 12px;font-size:12.5px;color:var(--ink2)}
-.try select,.try input{height:32px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font:12px var(--mono)}
-.try input{width:60px}
 .ofilter{width:100%;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--ground);font:12px var(--mono)}
 .tab .ct{margin-left:2px}
 
@@ -248,6 +203,85 @@ dialog.diff::backdrop{background:rgba(20,22,24,.32)}
   .pr{grid-template-columns:minmax(0,1fr) auto;padding:12px 16px}
   .pr>:not(:first-child):not(:nth-child(6)){display:none}
 }
+
+/* 0.5 pane: versions like Cloud Run revisions, the text as JSON (raw · Diff · Tuneable), replay */
+.rev{width:100%;border-collapse:collapse;font-size:13px}
+.rev th{position:sticky;top:0;z-index:1;height:44px;font-weight:500;color:var(--ink2);text-align:left;padding:0 8px;background:var(--ground);border-bottom:1px solid var(--line2);white-space:nowrap}
+.rev td{padding:0 8px;height:40px;border-bottom:1px solid var(--line2);white-space:nowrap}
+.rev tbody tr{cursor:pointer}
+.rev tbody tr:hover td{background:var(--surface)}
+.rev tbody tr.on td{background:var(--sunken)}
+.rev th:first-child,.rev td:first-child{padding-left:16px;width:34px}
+.rev th:nth-child(2),.rev td:nth-child(2){width:28px;padding-left:2px}
+.rev .num{text-align:right;width:70px}
+.rev .when{color:var(--ink2);width:76px;padding-right:16px}
+.radio{display:inline-block;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--ink3);vertical-align:middle}
+tr.on .radio{box-shadow:inset 0 0 0 1.5px var(--accent),inset 0 0 0 4.5px var(--surface);background:var(--accent)}
+.st{display:inline-flex;vertical-align:middle}
+.vn{font:12.5px var(--mono)}
+.vtag{margin-left:8px;font-size:11px;color:var(--ink3)}
+.pc{border:0;background:none;padding:3px 6px;margin-right:-6px;border-radius:6px;font-variant-numeric:tabular-nums;cursor:text;color:var(--ink);font-size:13px}
+.pc:hover{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.pc:disabled{cursor:default;background:none;box-shadow:none}
+.pc.zero{color:var(--ink3)}
+.pc input{width:46px;border:0;outline:0;background:none;text-align:right;padding:0;font:inherit;font-variant-numeric:tabular-nums}
+.pc.edit{background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--accent);display:inline-block}
+.dash{color:var(--ink3)}
+.jbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 16px;margin-top:4px;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--ink3);white-space:nowrap}
+.jbar .v{font:600 12.5px var(--mono);color:var(--ink);margin-right:6px}
+.jbar .linkbtn{margin-left:12px}
+.flt{height:28px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink2);font-size:12.5px;cursor:pointer}
+.flt:hover{background:var(--sunken)}
+.flt.on{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:500}
+.flt:disabled{color:var(--ink3);cursor:not-allowed;background:none}
+.jx{position:relative;padding:12px 0 14px;font:12.5px/1.75 var(--mono)}
+.jr{display:grid;grid-template-columns:40px minmax(0,1fr);padding-right:16px}
+.jx.refd .jr{grid-template-columns:40px minmax(0,1fr) 88px}
+.jn{color:var(--ink3);text-align:right;padding-right:14px;user-select:none;-webkit-user-select:none}
+.jc{white-space:pre-wrap;overflow-wrap:anywhere;padding-left:4ch;text-indent:-2ch}
+.jc.top{padding-left:0;text-indent:0}
+.jx .s{color:var(--ink)}
+.jx ins{text-decoration:none;background:var(--pass-tint);color:var(--pass)}
+.jx del{text-decoration:line-through;text-decoration-thickness:1px;background:var(--fail-tint);color:var(--fail)}
+.jx del+ins{margin-left:2px}
+.rg{position:absolute;right:12px;width:80px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:3px}
+.own,.lock{border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.own.hov{background:var(--sunken)}
+.lock{color:var(--ink3);background:repeating-linear-gradient(135deg,var(--hatch) 0 1px,transparent 1px 5px)}
+.lock.hov{color:var(--ink2)}
+.lki{display:inline-block;width:9px;height:11px;margin-right:4px;vertical-align:-1px}
+.leg{display:flex;flex-wrap:wrap;gap:6px 16px;padding:0 16px 12px 56px;font-size:12px;color:var(--ink3)}
+.leg span{display:inline-flex;align-items:center;gap:6px}
+.leg .aa{font:600 11px var(--sans);color:var(--ink)}
+.leg .ref{cursor:default;font-style:normal}
+.ref.ref-more{color:var(--ink3);cursor:default}
+.sw{display:inline-block;width:14px;height:11px;border-radius:2px}
+.sw.s-a{background:var(--pass-tint);box-shadow:inset 0 0 0 1px var(--pass)}
+.sw.s-d{background:var(--fail-tint);box-shadow:inset 0 0 0 1px var(--fail)}
+.sw.s-lk{background:repeating-linear-gradient(135deg,var(--hatch) 0 1px,transparent 1px 4px);box-shadow:inset 0 0 0 1px var(--line)}
+.tip{position:fixed;z-index:20;width:330px;max-width:calc(100vw - 24px);padding:11px 13px;border-radius:10px;background:var(--surface);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.16);font-size:12.5px;line-height:1.5;color:var(--ink2);pointer-events:none}
+.tip h5{margin:0 0 5px;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px}
+.tip .kv{display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 10px;margin-top:6px}
+.tip .kv>span:nth-child(odd){color:var(--ink3);font-size:11.5px;padding-top:1px}
+.tip .q{font:11.5px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.tip del{background:var(--fail-tint);color:var(--fail);text-decoration-thickness:1px}
+.pane#policy .err{margin:12px 16px 0}
+
+.filter{display:flex;gap:8px;align-items:center}
+.filter input{flex:1;min-width:0}
+.rvw{flex:none;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink2);font-size:12.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+.rvw:hover{color:var(--ink)}
+.rvw[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:var(--accent-tint)}
+.rvw .ct{font:11px var(--mono);color:inherit;opacity:.8}
+.jbar .save{margin-left:12px;height:28px;padding:0 12px;border:0;border-radius:7px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+.jbar .save:disabled{opacity:.6;cursor:default}
+.rev tbody tr.saved td{animation:saved 1.8s ease-out}
+.rev tbody tr:has(+ tr.trial) td{border-bottom:0}
+.rev tbody tr.trial{cursor:default}
+.rev tbody tr.trial td{height:auto;padding:0 8px 9px;font-size:12px;color:var(--ink2);white-space:normal;background:none}
+.rev tbody tr.trial .linkbtn{font-size:12px}
+.inherit{display:flex;gap:10px;align-items:center;padding:10px 16px;font-size:12.5px;color:var(--ink2);border-bottom:1px solid var(--line2)}
+@keyframes saved{0%,35%{background:var(--accent-tint)}}
 </style>
 </head>
 <body>
@@ -262,7 +296,7 @@ dialog.diff::backdrop{background:rgba(20,22,24,.32)}
   <section class="pane" id="policy" aria-label="Policy"></section>
 </main>
 <main id="gate" hidden></main>
-<dialog class="diff" id="dlg" aria-label="Changes"></dialog>
+<div class="tip" id="tip" hidden></div>
 
 <script>
 (() => {
@@ -272,13 +306,12 @@ dialog.diff::backdrop{background:rgba(20,22,24,.32)}
   const pct = (a, n) => n ? Math.round(a / n * 100) + "%" : "—";
   const ICON = {
     A:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>',
-    play:'<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>',
-    lock:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>'
+    play:'<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>'
   };
   const keep = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k,v) => { try { localStorage.setItem(k,v); } catch {} } };
 
-  const S = { multi:new Set(), view:"list", name:null, scope:"", data:null, tab:"queue", cur:null, caseView:null, sel:null, pick:new Set(), pickAll:false,
-    busy:null, error:null, overview:null, calls:{ q:"", rows:null, next:null }, editing:null, editSample:null, text:null, trying:false, ofilter:"", copied:false, gaps:new Set() };
+  const S = { multi:new Set(), view:"list", name:null, scope:"", data:null, tab:"calls", review:false, cur:null, caseView:null, sel:null, pick:new Set(), pickAll:false,
+    busy:null, error:null, overview:null, calls:{ q:"", rows:null, next:null }, editing:null, editSample:null, text:null, ofilter:"", copied:false, mode:"raw", views:{}, pctEdit:null };
 
   async function api(path, body) {
     const key = keep.get("decidus_key");
@@ -323,14 +356,13 @@ dialog.diff::backdrop{background:rgba(20,22,24,.32)}
 
   // ---------------- routing: #/p/<name>?scope=<scope> ----------------
   function route() {
-    if ($("dlg").open) $("dlg").close();
     const m = location.hash.match(/^#\/p\/([^?]+)(?:\?(.*))?$/);
     if (m) {
       const name = decodeURIComponent(m[1]), scope = new URLSearchParams(m[2] || "").get("scope") || "";
       S.view = "policy";
       if (S.name !== name || S.scope !== scope) {
-        if (S.name !== name) S.tab = "queue";
-        Object.assign(S, { name, scope, data:null, cur:null, caseView:null, sel:null, pickAll:false, error:null, editing:null, text:null, trying:false, calls:{ q:S.calls.q, rows:null, next:null } });
+        if (S.name !== name) S.tab = "calls";
+        Object.assign(S, { name, scope, data:null, cur:null, caseView:null, sel:null, pickAll:false, error:null, editing:null, text:null, calls:{ q:S.calls.q, rows:null, next:null } });
         S.pick.clear();
       }
     } else { S.view = "list"; S.name = null; }
@@ -347,15 +379,13 @@ dialog.diff::backdrop{background:rgba(20,22,24,.32)}
     await loadText();
   }
   // the selected version (or draft) merged into the text your code sends now
-  async function loadText() {
-    S.text = await api(scoped(P("/view?v=" + (S.sel === "S" ? "draft" : S.sel)))).then(t => ({ ...t, sel: S.sel })).catch(() => null);
-  }
+  async function loadText() { await loadViews(); }
   async function refresh(poll) {
     try {
       if (S.view === "list") { S.overview = await api("/api/overview"); renderOverview(); return; }
       await load();
-      if (!S.cur) { const q = S.data.queue; if (q.length) await open(q[0].id, false); }
       if (S.tab === "calls" && !S.calls.rows) await loadCalls();
+      if (!S.cur) { const first = S.tab === "calls" ? invocations()[0] : S.data.unprocessed[0]; if (first) await open(first.id, false); }
       renderPolicy(poll);
     } catch (e) { if (e.message !== "unauthorised") console.error(e); }
   }
@@ -388,11 +418,11 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       return;
     }
     $("ov").innerHTML = `<div class="ov-in"><h1>Policies</h1><div class="ptable">
-      <div class="ph-row"><span>Policy</span><span>Model</span><span>Live</span><span class="num">Calls · 14 days</span><span class="num">Agreement</span><span class="num">Queue</span><span class="num">To process</span><span class="num">Replay</span></div>
+      <div class="ph-row"><span>Policy</span><span>Model</span><span>Live</span><span class="num">Calls · 14 days</span><span class="num">Agreement</span><span class="num">To review</span><span class="num">To process</span><span class="num">Replay</span></div>
       ${rows.map(p => `<button type="button" class="pr" data-open="${esc(p.name)}">
         <span class="pcell"><span class="mono">${esc(p.name).replace(/\./g, ".<wbr>")}</span><span class="pi">${esc(p.instructions || "")}</span></span>
         <span class="pcell"><span class="mono" style="font-size:13px">${esc(p.model || "—")}</span><span class="pi">${esc(p.route)} · ${esc(p.kind)}</span></span>
-        <span class="pcell"><span class="mono" style="font-size:13px">${p.live ? '<i class="dot"></i> ' : ""}v${p.live}</span>${p.candidate ? `<span class="pi">v${p.candidate.n} ${esc(p.candidate.mode)} ${p.candidate.pct}%</span>` : p.overrides ? `<span class="pi">+${p.overrides} scoped</span>` : ""}</span>
+        <span class="pcell"><span class="mono" style="font-size:13px">${p.live ? '<i class="dot"></i> ' : ""}v${p.live}</span>${p.candidates?.length ? `<span class="pi">${p.candidates.map(c => `v${c.n} ${esc(c.mode)} ${c.pct}%`).join(" · ")}</span>` : p.overrides ? `<span class="pi">+${p.overrides} scoped</span>` : ""}</span>
         <span class="calls">${spark(p.daily)}<span class="mono">${fmt(p.calls)}</span></span>
         ${agreement(p.agreement)}
         <span class="mono num ${p.queue ? "hot" : ""}">${fmt(p.queue)}</span>
@@ -406,7 +436,7 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   const said = c => c.answer == null ? "no answer" : `${lab(c.answer)}${c.confidence != null ? " " + Number(c.confidence).toFixed(2) : ""}`;
   const scopeTag = c => c.scope && c.scope !== S.scope ? ` · <span class="sc">${esc(S.scope ? c.scope.slice(S.scope.length + 1) : c.scope)}</span>` : "";
   const shadowTag = c => c.shadow_version != null && c.shadow_answer !== c.answer ? ` · <span class="sc" title="Shadow v${esc(c.shadow_version)} diverged on this call">v${esc(c.shadow_version)}: ${esc(lab(c.shadow_answer ?? "–"))}</span>` : "";
-  const rowsNow = () => S.tab === "queue" ? S.data.queue : S.tab === "calls" ? (S.calls.rows || []) : [...S.data.unprocessed, ...S.data.processed];
+  const rowsNow = () => S.tab === "calls" ? invocations() : [...S.data.unprocessed, ...S.data.processed];
 
   function renderPolicy(poll) {
     $("ov").hidden = true; $("app").hidden = false;
@@ -430,21 +460,15 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   function renderList() {
     const d = S.data, t = d.tally, on = id => S.cur === id ? " on" : "";
     const tab = (k, l, n) => `<button class="tab" data-tab="${k}" aria-selected="${S.tab === k}">${l}${n != null ? ` <span class="ct">${fmt(n)}</span>` : ""}</button>`;
-    let h = `<div class="ph"><div class="tabs">${tab("queue","Queue",t.queue)}${tab("decided","Decided",t.unprocessed + t.processed)}${tab("calls","Calls",t.calls)}</div></div>`;
-
-    if (S.tab === "queue") {
-      const q = d.queue;
-      if (t.queue > q.length) h += `<div class="win"><span>${q.length} of ${fmt(t.queue)}</span><span class="fill"></span><span title="Picked round-robin across answers, confidence, versions${d.scopes.length ? " and scopes" : ""}; newest first">balanced mix</span></div>`;
-      h += `<div class="rows">${q.length ? q.map(c => caseRow(c, on(c.id))).join("") : '<div class="empty">Queue is empty</div>'}</div>`;
-      $("list").innerHTML = h; return;
-    }
+    let h = `<div class="ph"><div class="tabs">${tab("calls","Invocations",t.calls)}${tab("decided","Decided",t.unprocessed + t.processed)}</div></div>`;
 
     if (S.tab === "calls") {
-      h += `<div class="filter"><input id="cq" value="${esc(S.calls.q)}" placeholder="answer:billing  v:2  conf:<0.6  decided:no  conv_…" aria-label="Filter calls" autocomplete="off" spellcheck="false"></div><div class="rows">`;
-      const rows = S.calls.rows;
-      h += rows == null ? '<div class="empty">Loading…</div>' : rows.length ? rows.map(c => `<div class="row${on(c.id)}"><button class="rb" data-case="${c.id}"><div class="r-t">${esc(c.headline || "(no text)")}</div>
-        <div class="r-m">#${c.id} · ${c.decision != null ? `<span class="cat">✓ ${esc(lab(c.decision))}</span>` : `<span class="${sure(c) ? "ok" : "ans"}">${esc(said(c))}</span>`} · v${esc(c.version)}${scopeTag(c)} · ${c.status >= 400 ? `<span class="badc">HTTP ${esc(c.status)}</span>` : esc(c.ms) + " ms"} · ${ago(c.created_at)}</div></button></div>`).join("")
-        + (S.calls.next ? '<button class="more" id="more">Older calls</button>' : "") : '<div class="empty">No calls match</div>';
+      h += `<div class="filter"><input id="cq" value="${esc(S.calls.q)}" placeholder="Filter · answer:refund  v:2  conv_…" aria-label="Filter invocations" autocomplete="off" spellcheck="false">
+        <button class="rvw" id="review" aria-pressed="${S.review}" title="Only what you haven't decided, the cases the model is least sure of first">To review <span class="ct">${fmt(t.queue)}</span></button></div>`;
+      const rows = S.calls.rows == null ? null : invocations();
+      if (S.review && rows) h += `<div class="win"><span>${rows.length} undecided</span><span class="fill"></span><span title="Calls a shadow answered differently first, then the model's own doubt, then answers people often correct">least certain first</span></div>`;
+      h += `<div class="rows">` + (rows == null ? '<div class="empty">Loading…</div>' : rows.length ? rows.map(c => invRow(c, on(c.id))).join("")
+        + (S.calls.next && !S.review ? '<button class="more" id="more">Older invocations</button>' : "") : `<div class="empty">${S.review ? "Nothing left to review" : "No invocations match"}</div>`);
       $("list").innerHTML = h + "</div>"; return;
     }
 
@@ -464,8 +488,16 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     $("list").innerHTML = h;
   }
 
+  // To review: the server lists undecided calls, the ones the model was least sure of first
+  const invocations = () => (S.calls.rows || []).filter(c => !S.review || c.decision == null);
+  function invRow(c, on) {
+    return `<div class="row${on}"><button class="rb" data-case="${c.id}"><div class="r-t">${esc(c.headline || "(no text)")}</div>
+      <div class="r-m">#${c.id} · ${c.decision != null ? `<span class="cat">✓ ${esc(lab(c.decision))}</span>` : `<span class="${sure(c) ? "ok" : "ans"}">${esc(said(c))}</span>`} · v${esc(c.version)}${shadowTag(c)}${scopeTag(c)} · ${c.status >= 400 ? `<span class="badc">HTTP ${esc(c.status)}</span>` : ago(c.created_at)}</div></button>
+      ${c.answer != null && c.decision == null ? `<button class="qb" data-ok="${c.id}" title="Agree with ${esc(lab(c.answer))} (Enter)" aria-label="Agree with ${esc(lab(c.answer))} for #${c.id}">${ICON.A}</button>` : ""}</div>`;
+  }
   async function loadCalls(more) {
-    const qs = new URLSearchParams({ q: S.calls.q, limit: "100" });
+    const qs = new URLSearchParams({ q: S.calls.q });
+    if (S.review) qs.set("review", "1"); else qs.set("limit", "100");
     if (more && S.calls.next) qs.set("before", S.calls.next);
     const r = await api(scoped(P("/calls?" + qs)));
     S.calls.rows = more ? [...(S.calls.rows || []), ...r.calls] : r.calls;
@@ -507,115 +539,307 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       </div>`;
   }
 
-  // ---------------- policy pane ----------------
-  // The decision's text as JSON, one line per part. A version's edits show as a diff against your code;
-  // text that varies per call is grey (never edited); click a clause to lock it.
-  function textLines(parts) {
-    let no = 0, out = "";
-    const line = (cls, mk, src, refs, attr = "") => { no++; return `<div class="ln ${cls}"${attr}><span class="no">${no}</span><span class="mk">${mk}</span><span class="src">${src}</span><span class="refs">${refs || ""}</span></div>`; };
-    out += line("", "", '<span class="p">{</span>');
-    parts.forEach((x, i) => {
-      const comma = i < parts.length - 1 ? '<span class="p">,</span>' : "";
-      const vis = x.units.filter(u => u.kind !== "del");
-      const val = vis.map((u, j) => { const t = esc(u.text) + esc(j < vis.length - 1 ? u.sep || " " : ""); return u.dyn ? `<span class="vary" title="Dynamic: varies per call, never tuned">${t}</span>` : t; }).join("");
-      out += line("", "", `  <span class="k">"${esc(x.part)}"</span><span class="p">: </span><span class="s">"${val}"</span>${comma}`, "");
-    });
-    out += line("", "", '<span class="p">}</span>');
+  // ---------------- policy pane: versions and where each runs, the text as JSON, replay ----------------
+  // Versions read like Cloud Run revisions: traffic served, traffic shadowed. The text is the selected
+  // version's JSON, raw; Diff colors what it changes against the version it was built on; Tuneable greys
+  // out what your code injects per call (locked). Case refs on the right: the decided cases behind an edit.
+  const short = iso => iso ? new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" }) : "—";
+  const keyOf = k => k === "S" ? "draft" : String(k);
+  const pctTxt = p => (Math.round(p * 10) / 10) + "%";
+  async function loadViews() {
+    const d = S.data, keys = [...d.versions.map(v => v.n), ...(d.draft ? ["S"] : [])];
+    const r = await api(scoped(P("/texts?v=" + keys.map(keyOf).join(",")))).catch(() => null);
+    const meta = r ? { ready: r.ready, seen: r.seen, need: r.need, sample: r.sample } : {};
+    S.views = Object.fromEntries(keys.filter(k => r?.texts[keyOf(k)]).map(k => [k, { ...r.texts[keyOf(k)], ...meta }]));
+    syncText();
+  }
+  const syncText = () => { S.text = S.views?.[S.sel] ? { ...S.views[S.sel], sel: S.sel } : null; };
+  const verOf = k => k === "S" ? S.data.draft : S.data.versions.find(v => v.n === k);
+  const baseOf = k => verOf(k)?.base ?? null;
+  const labelOf = k => k === "S" ? `v${S.data.next}` : `v${k}`;
+  const canaries = () => S.data.candidates.filter(c => c.mode === "canary");
+  function traffic(k) {
+    if (k === "S") return 0;
+    const c = canaries().find(x => x.n === k);
+    if (c) return c.pct;
+    return k === S.data.effective.n ? Math.max(0, 100 - canaries().reduce((n, x) => n + x.pct, 0)) : 0;
+  }
+  const shadowOf = k => S.data.candidates.find(c => c.mode === "shadow" && c.n === k)?.pct ?? 0;
+  const stageTxt = k => traffic(k) ? `serving ${pctTxt(traffic(k))} of traffic` : shadowOf(k) ? `shadow on ${pctTxt(shadowOf(k))} of calls` : k === "S" ? "draft, not deployed" : "deployed, no traffic";
+
+  // the text of a version, part by part; what your code injects per call becomes one atomic token
+  let DYN = [];
+  function textOf(k) {
+    const v = S.views?.[k]; if (!v) return null;
+    const out = {};
+    for (const p of v.parts) {
+      // the merged text as the engine sends it; each injected clause in it becomes a token
+      const merged = v.merged?.[p.part] ?? "";
+      let pos = 0, s = "";
+      for (const u of p.units) {
+        if (u.kind === "del") continue;
+        const i = merged.indexOf(u.text, pos); if (i < 0) continue;
+        s += merged.slice(pos, i);
+        if (u.dyn) { let id = DYN.indexOf(u.text); if (id < 0) id = DYN.push(u.text) - 1; s += `\u0001${id}\u0002`; } else s += u.text;
+        pos = i + u.text.length;
+      }
+      out[p.part] = s + merged.slice(pos);
+    }
     return out;
   }
-  const dist = a => { const e = Object.entries(a || {}), n = e.reduce((x, [, v]) => x + v, 0); return n ? e.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => `${esc(lab(k || "–"))} ${pct(v, n)}`).join(", ") : "no calls yet"; };
-  const agreed = r => r.n ? `${pct(r.agree, r.n)} of ${r.n}` : "—";
+  const tok = s => s.split(/(\u0001\d+\u0002|\n+|[ \t]+|[.,;:!?—()'#-])/).filter(Boolean);
+  const isHole = t => /^\u0001\d+\u0002$/.test(t), isNl = t => /^\n+$/.test(t);
+  const holeText = t => DYN[+t.slice(1, -1)] ?? "";
+  const jstr = s => JSON.stringify(s).slice(1, -1);
+  const lines = s => s.split(/(\n)/).map(p => p === "\n" ? "<br>" : esc(jstr(p))).join("");
+
+  function segments(A, B) {
+    const n = A.length, m = B.length, L = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const segs = [], put = (k, i, j) => { const l = segs[segs.length - 1];
+      if (k === "=") { if (l?.k === "=") { l.a.push(i); l.b.push(j); } else segs.push({ k, a: [i], b: [j] }); }
+      else { const x = l?.k === "x" ? l : (segs.push({ k: "x", a: [], b: [] }), segs[segs.length - 1]); k === "-" ? x.a.push(i) : x.b.push(j); } };
+    let i = 0, j = 0;
+    while (i < n && j < m) { if (A[i] === B[j]) put("=", i++, j++); else if (L[i + 1][j] >= L[i][j + 1]) put("-", i++); else put("+", 0, j++); }
+    while (i < n) put("-", i++); while (j < m) put("+", 0, j++);
+    // a word or two of sameness between two changes folds into the change, so edits read as phrases
+    for (let again = true; again;) { again = false;
+      for (let k = 1; k < segs.length - 1; k++) { const s = segs[k], ts = s.a.map(x => A[x]);
+        if (s.k === "=" && segs[k - 1].k === "x" && segs[k + 1].k === "x" && ts.filter(x => /\w/.test(x)).length <= 2 && !ts.some(x => isHole(x) || /\n/.test(x))) {
+          const p = segs[k - 1], q = segs[k + 1]; p.a.push(...s.a, ...q.a); p.b.push(...s.b, ...q.b); segs.splice(k, 2); again = true; break; } } }
+    return segs;
+  }
+  const diff = (a, b) => { const A = tok(a), B = tok(b); return segments(A, B).flatMap(s => s.k === "=" ? s.b.map(j => ({ t: B[j], tag: "" })) : [...s.a.map(i => ({ t: A[i], tag: "del" })), ...s.b.map(j => ({ t: B[j], tag: "ins" }))]); };
+  // which version wrote each piece of text, following bases back to your code
+  function blame(k, part) {
+    const path = []; for (let x = k; x != null; x = baseOf(x)) path.unshift(x);
+    let cur = tok(textOf(path[0])?.[part] ?? "").map(t => ({ t, o: path[0], was: "" }));
+    for (const x of path.slice(1)) {
+      const real = cur.filter(z => !z.cut), A = real.map(z => z.t), B = tok(textOf(x)?.[part] ?? ""), out = [];
+      const before = new Map(); let pend = [];
+      for (const z of cur) { if (z.cut) pend.push(z); else { if (pend.length) before.set(z, pend); pend = []; } }
+      for (const sg of segments(A, B)) {
+        if (sg.k === "=") { sg.a.forEach(i => { const z = real[i]; if (before.has(z)) out.push(...before.get(z)); out.push(z); }); continue; }
+        const was = sg.a.map(i => A[i]).join("");
+        if (sg.b.length) sg.b.forEach(j => out.push({ t: B[j], o: x, was })); else out.push({ t: "", o: x, was, cut: true });
+      }
+      cur = out.concat(pend);
+    }
+    return { runs: cur, root: path[0] };
+  }
+
+  let RUNS = [], flashSaved = null;
+  const LOCKI = '<svg class="lki" viewBox="0 0 10 12" fill="currentColor" aria-hidden="true"><path d="M2 5V3.5a3 3 0 0 1 6 0V5h.5A1.5 1.5 0 0 1 10 6.5v4A1.5 1.5 0 0 1 8.5 12h-7A1.5 1.5 0 0 1 0 10.5v-4A1.5 1.5 0 0 1 1.5 5H2zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0V5z"/></svg>';
+  function strHtml(toks, anchor) {
+    let first = !!anchor;
+    return toks.map(x => {
+      const a = first && x.tag ? (first = false, `<span class="ra" data-refs="${esc(anchor)}"></span>`) : "";
+      if (isHole(x.t)) return a + lines(holeText(x.t));
+      if (isNl(x.t)) return a + (x.tag === "del" ? "" : "<br>".repeat(x.t.length));
+      const h = esc(jstr(x.t));
+      return a + (x.tag ? `<${x.tag}>${h}</${x.tag}>` : h);
+    }).join("");
+  }
+  function tuneHtml(k, part) {
+    const { runs: toks, root } = blame(k, part), runs = [];
+    for (const x of toks) {
+      const hole = isHole(x.t), last = runs[runs.length - 1];
+      if (!hole && !x.cut && last && !last.hole && !last.cut && last.o === x.o && last.was === x.was) last.t += x.t;
+      else runs.push({ ...x, hole, part, root });
+    }
+    const anchored = new Set();
+    return runs.map(r => {
+      const a = r.o !== root && !anchored.has(r.o) ? (anchored.add(r.o), `<span class="ra" data-refs="${esc(r.o + "|" + part)}"></span>`) : "";
+      if (r.cut) return a;
+      const i = RUNS.push(r) - 1;
+      if (r.hole) return a + `<span class="lock" data-r="${i}">${LOCKI}${lines(holeText(r.t))}</span>`;
+      return a + `<span class="own" data-r="${i}">${lines(r.t)}</span>`;
+    }).join("");
+  }
+  function jsonHtml() {
+    RUNS = [];
+    const k = S.sel, t = textOf(k);
+    if (!t) return '<div class="empty">Loading…</div>';
+    const b = S.mode === "diff" && baseOf(k) != null ? textOf(baseOf(k)) : null, keys = Object.keys(t);
+    const rows = ['<span class="p">{</span>', ...keys.map((part, i) => {
+      const body = S.mode === "tune" ? tuneHtml(k, part) : strHtml(b ? diff(b[part] ?? "", t[part]) : tok(t[part]).map(x => ({ t: x, tag: "" })), b ? `${k}|${part}` : null);
+      return `<span class="k">"${esc(part)}"</span><span class="p">: </span><span class="s">"${body}"</span>${i < keys.length - 1 ? '<span class="p">,</span>' : ""}`;
+    }), '<span class="p">}</span>'];
+    return rows.map((r, i) => `<div class="jr"><span class="jn">${i + 1}</span><span class="jc${i === 0 || i === rows.length - 1 ? " top" : ""}">${r}</span></div>`).join("");
+  }
+  function byOf(v) {
+    const o = v.origin ?? v.log?.origin;
+    if (v.log?.rebased != null || o === "rebased") return `Rebased from v${v.log?.rebased ?? "?"}`;
+    if (o === "hand") return "Edited by hand";
+    if (o === "tuned") return "Auto-tuned";
+    if (o === "generated") return "Generated from decided cases";
+    const log = v.tune ?? v.log?.tune ?? [];                     // versions from before 0.5
+    return log.some(t => /by hand/.test(t.note)) ? "Edited by hand" : log.length ? "Generated, then auto-tuned" : "Generated from decided cases";
+  }
+  function tipHtml(r) {
+    if (r.hole) return `<h5>${LOCKI}Locked</h5>Your code injects this on every call, so it differs between calls. decidus never stores it and never tunes it.`;
+    if (r.o === r.root) return `<h5>Tuneable · from code</h5>The text your code sends, unchanged in ${labelOf(S.sel)}. Auto-tune may rewrite it.`;
+    const v = verOf(r.o), notes = r.o === "S" ? v?.notes : v?.log?.notes;
+    return `<h5>Tuneable · ${r.was.trim() ? "rewritten" : "added"} by ${labelOf(r.o)}${r.o === "S" ? " (draft)" : ""}</h5><div class="kv">
+      ${r.was.trim() ? `<span>was</span><span class="q"><del>${esc(r.was.trim())}</del></span>` : ""}
+      ${notes ? `<span>why</span><span>${esc(notes)}</span>` : ""}
+      ${v ? `<span>by</span><span>${esc(byOf(v))} · ${short(v.created_at)}</span>` : ""}
+      <span>now</span><span>${stageTxt(r.o)}</span></div>`;
+  }
+  function placeRefs() {
+    const box = $("jx"); if (!box) return;
+    box.querySelectorAll(".rg").forEach(x => x.remove());
+    const top0 = box.getBoundingClientRect().top; let floor = 0;
+    for (const a of box.querySelectorAll(".ra")) {
+      const [o, part] = a.dataset.refs.split("|"), k = o === "S" ? "S" : +o, v = verOf(k), ids = v?.because?.[part] ?? [];
+      if (!ids.length) continue;
+      const res = new Map((v.replay ?? []).map(r => [r.id, r]));
+      const g = document.createElement("div"); g.className = "rg";
+      const more = ids.length > 4 ? ids.length - 3 : 0;
+      g.innerHTML = (more ? ids.slice(0, 3) : ids).map(id => { const r = res.get(id); return `<button class="ref" data-case="${id}" title="#${id}${r ? ` · you: ${esc(lab(r.human))} · ${labelOf(k)}: ${esc(lab(r.model ?? "no answer"))}` : ""} · behind ${labelOf(k)}'s edit">#${id}</button>`; }).join("") + (more ? `<span class="ref ref-more" title="${ids.slice(3).map(x => "#" + x).join(" ")}">+${more}</span>` : "");
+      const y = Math.max(a.getBoundingClientRect().top - top0 + 3, floor);
+      g.style.top = y + "px"; box.appendChild(g); floor = y + g.offsetHeight + 4;
+    }
+  }
+  addEventListener("resize", () => placeRefs());
+
+  const ICONS = {
+    serving: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="var(--pass)"/><path d="M5.3 9.2l2.4 2.4 5-5" fill="none" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    shadow: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.2" fill="none" stroke="var(--accent)" stroke-width="1.6"/><path d="M9 1.8a7.2 7.2 0 0 1 0 14.4z" fill="var(--accent)"/></svg>',
+    idle: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="var(--idle)"/><path d="M5.3 9.2l2.4 2.4 5-5" fill="none" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    draft: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.2" fill="none" stroke="var(--idle)" stroke-width="1.5" stroke-dasharray="2.6 2.2"/></svg>',
+  };
+  // what a trial shows so far: for a shadow, how often it answered differently; for both, who agrees with you more
+  const agreeTxt = r => r.n ? Math.round(r.agree / r.n * 100) + "%" : "–";
+  const split = a => { const e = Object.entries(a || {}), n = e.reduce((x, [, v]) => x + v, 0); return n ? e.sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => `${lab(k || "–")} ${Math.round(v / n * 100)}%`).join(", ") : "no calls yet"; };
+  function trialLine(k) {
+    const c = S.data.candidates.find(x => x.n === k), m = c && S.data.compare?.[k];
+    if (!m) return "";
+    const lv = labelOf(m.live.n), parts = [];
+    if (c.mode === "shadow") parts.push(m.paired?.differ ? `<button class="linkbtn" data-differs="${k}" title="Show these calls">${m.paired.differ} of ${m.paired.n} answered differently</button>` : `${m.paired?.n ?? 0} compared, none different`);
+    else parts.push(`${Object.values(m.candidate.answers).reduce((a, b) => a + b, 0)} calls answered since ${short(c.since)}`);
+    if (m.candidate.reviewed.n) parts.push(`agrees with you ${agreeTxt(m.candidate.reviewed)} of ${m.candidate.reviewed.n} decided, ${lv} ${agreeTxt(m.live.reviewed)}`);
+    return `<tr class="trial"><td colspan="2"></td><td colspan="4" title="${esc(`Since ${short(c.since)} · ${lv}: ${split(m.live.answers)} · ${labelOf(k)}: ${split(m.candidate.answers)}`)}">${parts.join(" · ")}</td></tr>`;
+  }
+  function revTable() {
+    const d = S.data, keys = [...(d.draft ? ["S"] : []), ...d.versions.map(v => v.n).sort((a, b) => b - a)];
+    const cell = (k, kind) => {
+      const v = kind === "traffic" ? traffic(k) : shadowOf(k);
+      if (S.pctEdit && S.pctEdit.k === k && S.pctEdit.kind === kind) return `<span class="pc edit"><input id="pcin" type="number" min="0" max="100" step="any" value="${v}">%</span>`;
+      if (kind === "shadow" && traffic(k)) return '<span class="dash" title="Serving traffic already">—</span>';
+      return `<button class="pc${v ? "" : " zero"}" data-pct="${kind}" data-k="${k}" title="Set the share of ${kind === "traffic" ? "traffic this version serves" : "calls this version also runs on, answers compared, not served"}"${S.busy ? " disabled" : ""}>${kind === "shadow" && !v ? "—" : pctTxt(v)}</button>`;
+    };
+    const rows = keys.map(k => {
+      const v = verOf(k), [icon, tip] = traffic(k) ? [ICONS.serving, `Serving ${pctTxt(traffic(k))} of traffic`] : shadowOf(k) ? [ICONS.shadow, `Shadow: runs on ${pctTxt(shadowOf(k))} of calls, answers compared, not served`] : k === "S" ? [ICONS.draft, "Draft: not deployed"] : [ICONS.idle, k === 0 ? "The text from code, the base every version edits" : "Deployed, no traffic"];
+      const tag = k === 0 ? "from code" : k === "S" ? "draft" : v.scope && v.scope !== S.scope ? (v.scope || "global") : "";
+      return `<tr data-rv="${k}" class="${k === S.sel ? "on" : ""}${k === flashSaved ? " saved" : ""}"><td><span class="radio"></span></td><td><span class="st" title="${esc(tip)}">${icon}</span></td>
+        <td><span class="vn">${labelOf(k)}</span>${tag ? `<span class="vtag">${esc(tag)}</span>` : ""}</td><td class="num">${cell(k, "traffic")}</td><td class="num">${cell(k, "shadow")}</td>
+        <td class="when">${k === 0 || k === "S" ? "—" : short(v.created_at)}</td></tr>${trialLine(k)}`;
+    }).join("");
+    return `<table class="rev"><thead><tr><th></th><th><span class="st" title="Status">${ICONS.idle.replace('fill="var(--idle)"', 'fill="var(--ink3)"')}</span></th><th>Version</th><th class="num">Traffic</th><th class="num">Shadow</th><th class="when">Deployed ↓</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
 
   function renderPane() {
-    const d = S.data, sug = d.draft, vs = d.versions, eff = d.effective, cand = d.candidate, t = d.template, T = S.text;
+    const d = S.data, eff = d.effective, t = d.template;
     if (S.editing) document.querySelectorAll("#editForm textarea").forEach(x => { S.editing[x.name] = x.value; });   // keep what's typed across re-renders
-    if (S.sel === "S" && !sug) S.sel = eff.n;
-    if (S.sel !== "S" && !vs.some(v => v.n === S.sel)) S.sel = eff.n;
-    let tabs = vs.map(v => `<button class="tab v${v.scope ? " own" : ""}" data-v="${v.n}" aria-selected="${S.sel === v.n}" title="${esc(v.scope || "global")}${cand?.n === v.n ? ` · in ${cand.mode} on ${cand.pct}% of calls` : ""}">${v.n === eff.n ? '<i class="dot"></i>' : ""}v${v.n}${cand?.n === v.n ? `<span class="ct">${esc(cand.mode)}</span>` : ""}</button>`).join("");
-    if (sug) tabs += `<button class="tab v sug" data-v="S" aria-selected="${S.sel === "S"}">Draft</button>`;
-    const isSug = S.sel === "S", cur = isSug ? sug : vs.find(v => v.n === S.sel);
-    const canLive = !isSug && S.sel !== eff.n && cand?.n !== S.sel;
-    const changed = T && T.sel === S.sel && T.parts.some(x => x.units.some(u => u.kind !== "keep"));
-    let h = `<div class="ph"><nav class="tabs" aria-label="Versions">${tabs}</nav><span class="fill"></span>${T && !S.editing ? `<button class="linkbtn" id="diffBtn" title="${changed ? "Diff against the text in your code" : "Inspect the text line by line; lock lines"}">${changed ? "Diff" : "Lines"}</button><button class="linkbtn" id="copy" style="margin-left:14px" title="The text as the newest call would send it">${S.copied ? "Copied" : "Copy"}</button>` : ""}${canLive ? `<button class="linkbtn" id="rollback" style="margin-left:14px">${S.sel < eff.n ? "Roll back to" : "Deploy"} v${S.sel}${S.scope ? " here" : ""}</button>` : ""}${S.scope && d.own != null && !canLive ? `<button class="linkbtn" id="inherit" style="margin-left:14px" title="Drop this scope's override and run what ${esc(S.scope.split("/").slice(0, -1).join("/") || "global")} runs">Inherit</button>` : ""}</div>`;
+    if (S.sel === "S" && !d.draft) S.sel = eff.n;
+    if (S.sel !== "S" && !d.versions.some(v => v.n === S.sel)) S.sel = eff.n;
+    if (S.text?.sel !== S.sel) syncText();
+    if (S.mode === "diff" && baseOf(S.sel) == null) S.mode = "raw";
+    hideTip();
+    let h = revTable();
+    if (S.scope && d.own != null && d.parent) h += `<div class="inherit"><span>${esc(S.scope)} runs its own version</span><button class="linkbtn" id="inherit"${S.busy ? " disabled" : ""} title="Drop ${esc(S.scope)}'s own version: it runs what ${esc(d.parent.from || "global")} runs, now and later">Inherit ${esc(d.parent.from || "global")} (v${d.parent.n})</button></div>`;
     if (S.error) h += `<div class="err">${esc(S.error)}</div>`;
-    if (!t.ready) h += `<div class="notes" title="decidus only tunes static text: what your code sends on every call">Sampling ${t.seen}/${t.need} calls${S.scope ? " in this scope" : ""} to detect static vs dynamic text. Tuning unlocks at ${t.need}.</div>`;
-    if (d.retired) h += `<div class="notes warn"><b style="color:inherit">Conflict:</b> your code changed text v${d.retired.version} edits. Code wins, ${d.retired.ops.length} edit${d.retired.ops.length === 1 ? "" : "s"} skipped. <button class="linkbtn" id="rebase"${S.busy ? " disabled" : ""} title="Re-apply v${d.retired.version}'s edits on top of your code's new text, as a new version">Rebase v${d.retired.version}</button></div>`;
-    if (!T || T.sel !== S.sel) { $("policy").innerHTML = h + '<div class="empty">Loading…</div>'; return; }
-
-    if (S.editing) {
+    if (!t.ready) h += `<div class="notes" style="margin-top:12px" title="decidus only tunes static text: what your code sends on every call">Sampling ${t.seen}/${t.need} calls${S.scope ? " in this scope" : ""} to tell what your code injects per call from the text it always sends. Tuning unlocks at ${t.need}.</div>`;
+    if (d.retired) h += `<div class="notes warn" style="margin-top:12px"><b style="color:inherit">Conflict:</b> your code changed text v${d.retired.version} edits. Code wins, ${d.retired.ops.length} edit${d.retired.ops.length === 1 ? "" : "s"} skipped. <button class="linkbtn" id="rebase"${S.busy ? " disabled" : ""} title="Re-apply v${d.retired.version}'s edits on top of your code's new text, as a new version">Rebase v${d.retired.version}</button></div>`;
+    const T = S.text;
+    if (S.editing && T) {
       const fixed = Object.entries(T.fixed || {});
       h += `<form class="edit" id="editForm">${Object.keys(T.edit).map(part => `<label>"${esc(part)}"<textarea name="${esc(part)}" rows="${Math.min(12, 2 + Math.ceil((S.editing[part] || "").length / 60))}">${esc(S.editing[part] ?? "")}</textarea></label>`).join("")}</form>
-        ${fixed.length ? `<div class="stat">${fixed.map(([id, f]) => `⟦${id}⟧ ${f.dyn ? "dynamic" : "locked"}, read-only`).join("<br>")}</div>` : ""}
-        <div class="sugbar"><button class="ghost" id="editCancel">Cancel</button><button class="primary" id="editSave">Save as draft</button></div>`;
+        ${fixed.length ? `<div class="stat">${fixed.map(([id, f]) => `⟦${id}⟧ ${f.dyn ? "injected by your code per call" : "locked"}, read-only`).join("<br>")}</div>` : ""}
+        <div class="sugbar"><button class="ghost" id="editCancel">Cancel</button><button class="primary" id="editSave">Save draft</button></div>`;
       $("policy").innerHTML = h; return;
     }
+    const k = S.sel, b = baseOf(k), isDraft = k === "S", canEdit = t.ready && (isDraft || k === eff.n);
+    h += `<div class="jbar"><span class="v">${labelOf(k)}</span>
+      <button class="flt${S.mode === "diff" ? " on" : ""}" data-mode="diff"${b == null ? ` disabled title="Your code's own text: nothing before it"` : ""}>Diff</button>${S.mode === "diff" && b != null ? `<span>vs ${labelOf(b)}</span>` : ""}
+      <button class="flt${S.mode === "tune" ? " on" : ""}" data-mode="tune">Tuneable</button><span class="fill"></span>
+      ${canEdit ? `<button class="linkbtn" id="edit"${S.busy ? " disabled" : ""}>Edit</button>` : ""}${isDraft ? `<button class="linkbtn" id="discard"${S.busy ? " disabled" : ""}>Discard</button>` : ""}
+      <button class="linkbtn" id="copy" title="The text as the newest call would send it">${S.copied ? "Copied" : "Copy"}</button>
+      ${isDraft ? `<button class="save" data-a="save"${S.busy ? " disabled" : ""} title="Keep this draft as ${labelOf("S")}. It gets no traffic until you give it some in the table.">${S.busy === "save" ? '<span class="spin"></span>Saving…' : `Save as ${labelOf("S")}`}</button>` : ""}</div>
+      <div class="jx${S.mode === "raw" ? "" : " refd"}" id="jx">${jsonHtml()}</div>`;
+    if (S.mode === "diff") h += `<div class="leg"><span><i class="sw s-a"></i>added</span><span><i class="sw s-d"></i>removed</span><span><i class="ref">#118</i>cases behind it</span></div>`;
+    if (S.mode === "tune") h += `<div class="leg"><span><b class="aa">Aa</b>tuneable</span><span><i class="sw s-lk"></i>locked: your code injects it per call</span><span><i class="ref">#118</i>cases behind an edit</span></div>`;
 
-    h += `<div class="code">${textLines(T.parts)}</div>`;
-    if (cur.legacy) h += `<div class="notes">Written by decidus 0.3 as option descriptions; it no longer changes calls.</div>`;
-    const a = !isSug && d.agreement[cur.n];
-    if (a) h += `<div class="stat">People agreed with v${cur.n} on <b>${pct(a.agree, a.n)}</b> · ${fmt(a.n)} reviewed</div>`;
-
-    const results = cur.replay, failing = results ? results.filter(r => !r.pass).length : 0;
-    if (isSug) {
-      h += `<div class="sugbar"><button class="ghost" id="edit"${S.busy ? " disabled" : ""}>Edit</button><span class="fill"></span><button class="ghost" id="discard"${S.busy ? " disabled" : ""}>Discard</button><button class="ghost" id="tryBtn"${S.busy ? " disabled" : ""} title="Shadow or canary on a share of traffic before deploying">Rollout…</button><button class="primary" id="accept"${S.busy ? " disabled" : ""} title="Every call runs it within 30s">Deploy v${d.next}${S.scope ? " to " + esc(S.scope) : ""}</button></div>`;
-      if (S.trying) h += `<div class="try"><select id="mode" aria-label="Rollout strategy"><option value="shadow">shadow</option><option value="canary">canary</option></select><input id="pct" type="number" min="0.1" max="100" step="any" value="10" aria-label="Traffic, %"> % traffic <button class="ghost" id="tryStart"${S.busy ? " disabled" : ""}>Start rollout</button><span class="muted">shadow mirrors traffic (not served) · canary serves it, sticky per conversationId</span></div>`;
-    }
-    else if (cand && cand.n === S.sel && cand.scope === S.scope) h += `<div class="sugbar"><span class="muted" style="margin-right:auto;align-self:center;font-size:12.5px">${cand.mode === "shadow" ? `Shadow · mirroring ${cand.pct}% of traffic` : `Canary · serving ${cand.pct}% of traffic`}</span><button class="ghost" id="stop"${S.busy ? " disabled" : ""} title="End the rollout; v${eff.n} keeps serving">Abort</button><button class="primary" data-stage="live" data-target="${cand.n}"${S.busy ? " disabled" : ""} title="Deploy v${cand.n} to all traffic">Promote</button></div>`;
-    else if (S.sel === eff.n && !sug) h += `<div class="sugbar"><button class="ghost" id="edit"${S.busy || !t.ready ? " disabled" : ""}>Edit</button></div>`;
-
+    const cur = verOf(k), results = cur?.replay, failing = results ? results.filter(r => !r.pass).length : 0;
     const n = d.tally.unprocessed + d.tally.processed, rb = S.busy === "replay", tb = S.busy === "tune";
+    const tunable = failing && t.ready && (isDraft || !d.draft);
     h += `<div class="replay"><div class="r-head"><div class="r-btns">
-        <button class="ghost" id="replayBtn" ${!n || S.busy ? "disabled" : ""}>${rb ? '<span class="spin"></span>Replaying…' : ICON.play + "Replay"}</button>
-        ${isSug && (failing || tb) ? `<button class="ghost tune" id="tuneBtn" ${S.busy ? "disabled" : ""}>${tb ? '<span class="spin"></span>Tuning…' : "Auto-tune"}</button>` : ""}
+        <button class="ghost" data-a="replay" ${!n || S.busy ? "disabled" : ""}>${rb ? '<span class="spin"></span>Replaying…' : ICON.play + "Replay"}</button>
+        ${tunable || tb ? `<button class="ghost tune" data-a="tune" ${S.busy ? "disabled" : ""} title="${isDraft ? "Rewrites the draft's tuneable text to fix its misses" : `Writes a draft from ${labelOf(k)} that fixes its misses`}">${tb ? '<span class="spin"></span>Tuning…' : "Auto-tune"}</button>` : ""}
       </div><span class="r-sum">${!n ? "No decided cases" : results ? `<b>${pct(results.length - failing, results.length)}</b> · ${results.length - failing}/${results.length} pass` : "Not run"}</span></div>`;
-    if (results?.length) h += `<div class="tiles">${results.map(r => `<button class="tile ${r.pass ? "pass" : "fail"}" data-case="${r.id}" title="#${r.id} · you: ${esc(lab(r.human))} · model: ${esc(r.model == null ? (r.error || "no answer") : lab(r.model))}">${r.id}</button>`).join("")}</div>`;
-    const log = isSug ? sug.tune : cur.log?.tune;
-    if (log?.length) h += `<ol class="tlog">${log.map(t => `<li><span class="mono muted">${t.round}</span><span class="mono ${t.pass != null && t.pass === t.n ? "okc" : ""}">${t.pass != null ? `${t.pass}/${t.n}` : "—"}</span><span>${esc(t.note)}</span></li>`).join("")}</ol>`;
+    if (results?.length) h += `<div class="tiles">${results.map(r => `<button class="tile ${r.pass ? "pass" : "fail"}" data-case="${r.id}" title="#${r.id} · you: ${esc(lab(r.human))} · ${labelOf(k)}: ${esc(r.model == null ? (r.error || "no answer") : lab(r.model))}">${r.id}</button>`).join("")}</div>`;
+    const log = isDraft ? cur?.tune : cur?.log?.tune;
+    if (log?.length) h += `<ol class="tlog">${log.map(x => `<li><span class="mono muted">${x.round}</span><span class="mono ${x.pass != null && x.pass === x.n ? "okc" : ""}">${x.pass != null ? `${x.pass}/${x.n}` : "—"}</span><span>${esc(x.note)}</span></li>`).join("")}</ol>`;
     h += "</div>";
-    $("policy").innerHTML = h;
+    $("policy").innerHTML = h; flashSaved = null;
+    const inp = $("pcin"); if (inp) { inp.focus(); inp.select(); }
+    placeRefs();
   }
 
-  // ---------------- the diff: what a version changes in your code's text, one clause per line ----------------
-  function renderDiff() {
-    const d = S.data, T = S.text, isSug = S.sel === "S", cur = isSug ? d.draft : d.versions.find(v => v.n === S.sel), cand = d.candidate;
-    if (!T || !cur) return;
-    const k = d.compare;
-    const any = T.parts.some(x => x.units.some(u => u.kind !== "keep"));
-    let h = `<div class="dh"><b>${isSug ? "Draft" : "v" + cur.n}</b><span class="muted">${any ? "vs. your code" : "inspect"}${S.scope ? " · " + esc(S.scope) : ""}</span><button class="x" data-x aria-label="Close">×</button></div><div class="db">`;
-    const notes = isSug ? cur.notes : cur.log?.notes;
-    if (notes && any) h += `<div class="dnote">${esc(notes)}</div>`;
-    if (cand && k && cand.n === cur.n) h += `<div class="dlive">${esc(cand.mode)} · ${cand.pct}% traffic · since ${ago(cand.since)}<br>v${k.live.n} answers: ${dist(k.live.answers)}<br>v${cand.n} answers: ${dist(k.candidate.answers)}${k.paired ? `<br>divergence: ${k.paired.differ}/${k.paired.n} calls` : ""}${k.live.reviewed.n || k.candidate.reviewed.n ? `<br>human agreement: v${k.live.n} ${agreed(k.live.reviewed)}, v${cand.n} ${agreed(k.candidate.reviewed)}` : ""}</div>`;
-    const row = (part, u) => {
-      const cls = u.kind === "add" ? "add" : u.kind === "del" ? "cut" : u.dyn ? "var" : "";
-      const lk = u.kind === "keep" && u.key && !u.dyn ? `<button class="lk${u.locked ? " on" : ""}" data-lock="${esc(part)}" data-key="${esc(u.key)}" data-on="${u.locked ? "" : "1"}" title="${u.locked ? "Locked: never tuned. Click to unlock." : "Lock: never tune this line"}" aria-label="${u.locked ? "Unlock" : "Lock"} line">${ICON.lock}</button>` : "<span></span>";
-      const share = u.kind !== "add" && u.share != null ? `<span class="c" title="Sent in this share of recent calls">${Math.round(u.share * 100)}%</span>` : "<span></span>";
-      return `<div class="dl ${cls}"${u.dyn ? ' title="Dynamic: varies per call, never tuned"' : ""}><span class="m">${u.kind === "add" ? "+" : u.kind === "del" ? "−" : ""}</span><span class="t">${esc(u.text)}</span>${share}${lk}</div>`;
-    };
-    for (const x of T.parts) {
-      const rows = x.units.filter(u => u.key || u.kind === "add"), changed = rows.some(u => u.kind !== "keep");
-      const refs = (cur.because?.[x.part] || []).map(id => `<button class="ref" data-case="${id}">#${id}</button>`).join("");
-      h += `<div class="dpart"><h4>${esc(x.part)}${changed || !any ? "" : '<span class="muted">unchanged</span>'}${changed && refs ? `<span class="refs" title="Decided cases behind this change">${refs}</span>` : ""}</h4>`;
-      // changes with two lines of context; the rest folds away until clicked (nothing folds when nothing changed)
-      const near = rows.map((_, i) => !any || rows.slice(Math.max(0, i - 2), i + 3).some(r => r.kind !== "keep"));
-      for (let i = 0; i < rows.length;) {
-        if (!near[i] && !S.gaps.has(x.part)) {
-          let j = i; while (j < rows.length && !near[j]) j++;
-          h += `<div class="dl gap" data-gap="${esc(x.part)}"><span class="m">⋯</span><span class="t">${j - i} unchanged line${j - i > 1 ? "s" : ""}</span><span></span><span></span></div>`;
-          i = j; continue;
-        }
-        h += row(x.part, rows[i]); i++;
-      }
-      h += "</div>";
-    }
-    h += `<div class="dfoot">grey = dynamic (varies per call), never tuned · % = share of recent calls that send the line · lock a line to freeze it</div></div>`;
-    $("dlg").innerHTML = h;
+  // a share of traffic, as with revisions: the live version keeps what the canaries don't take
+  async function setPct(k, kind, p) {
+    const was = kind === "traffic" ? traffic(k) : shadowOf(k);
+    p = Math.max(0, Math.min(100, Number(p) || 0));
+    if (p === was) return renderPane();
+    return act("traffic", async () => {
+      const r = await post("traffic", { version: k === "S" ? "draft" : k, [kind]: p });
+      if (k === "S") S.sel = r.n;
+    });
   }
-  async function openDiff() {
-    if (S.text?.sel !== S.sel) await loadText();
-    S.gaps.clear(); renderDiff();
-    if (!$("dlg").open) $("dlg").showModal();
+
+  // hover: where a piece of text comes from
+  function showTip(el, ev) {
+    const r = RUNS[+el.dataset.r], t = $("tip"); if (!r) return;
+    t.innerHTML = tipHtml(r); t.hidden = false; el.classList.add("hov");
+    const rects = [...el.getClientRects()], box = rects.find(b => ev.clientY >= b.top - 2 && ev.clientY <= b.bottom + 2) ?? rects[rects.length - 1];
+    const w = t.offsetWidth, h = t.offsetHeight, x = Math.max(12, Math.min(innerWidth - w - 12, ev.clientX - 24));
+    t.style.left = x + "px"; t.style.top = (box.bottom + 8 + h > innerHeight - 8 ? box.top - h - 8 : box.bottom + 8) + "px";
   }
-  $("dlg").addEventListener("click", e => { if (e.target === $("dlg")) $("dlg").close(); });
+  function hideTip() { const t = $("tip"); if (t) t.hidden = true; document.querySelectorAll(".hov").forEach(x => x.classList.remove("hov")); }
+  $("policy").addEventListener("mouseover", e => { const el = e.target.closest("[data-r]"); hideTip(); if (el && S.mode === "tune") showTip(el, e); });
+  $("policy").addEventListener("mouseleave", hideTip);
+  $("policy").addEventListener("scroll", hideTip, { passive: true });
+
+  $("policy").addEventListener("click", async e => {
+    const t = e.target;
+    const pc = t.closest("[data-pct]");
+    if (pc && !pc.disabled) { e.stopPropagation(); S.pctEdit = { k: pc.dataset.k === "S" ? "S" : +pc.dataset.k, kind: pc.dataset.pct }; renderPane(); return; }
+    if (t.closest(".pc.edit")) return;
+    const md = t.closest("[data-mode]");
+    if (md && !md.disabled) { S.mode = S.mode === md.dataset.mode ? "raw" : md.dataset.mode; renderPane(); return; }
+    const rv = t.closest("tr[data-rv]");
+    if (rv) { const k = rv.dataset.rv === "S" ? "S" : +rv.dataset.rv; if (k !== S.sel) { S.sel = k; S.editing = null; syncText(); } renderPane(); return; }
+    const a = t.closest("[data-a]");
+    if (a?.dataset.a === "save") return act("save", async () => { const r = await post("save"); S.sel = r.n; flashSaved = r.n; });
+    const df = t.closest("[data-differs]");
+    if (df) { S.tab = "calls"; S.review = false; S.calls.q = `differs:${df.dataset.differs}`; S.calls.rows = null; renderList(); await loadCalls(); renderList(); return; }
+    if (a?.dataset.a === "replay") return act("replay", () => post("replay", { target: S.sel === "S" ? "draft" : S.sel }));
+    if (a?.dataset.a === "tune") return act("tune", async () => {
+      await post("tune", S.sel === "S" ? {} : { from: S.sel }); S.sel = "S"; S.mode = "diff";
+    });
+  });
+  $("policy").addEventListener("keydown", e => {
+    if (e.target.id !== "pcin" || !S.pctEdit) return;
+    if (e.key === "Enter") { e.preventDefault(); const { k, kind } = S.pctEdit; S.pctEdit = null; setPct(k, kind, e.target.value); }
+    if (e.key === "Escape") { S.pctEdit = null; renderPane(); }
+  });
+  $("policy").addEventListener("focusout", e => {
+    if (e.target.id !== "pcin" || !S.pctEdit) return;
+    const { k, kind } = S.pctEdit, v = e.target.value; S.pctEdit = null;
+    setTimeout(() => setPct(k, kind, v));
+  });
+
 
   // ---------------- actions ----------------
   async function act(kind, fn) {
@@ -624,7 +848,6 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     S.busy = null;
     await load();
     renderPolicy();
-    if ($("dlg").open) renderDiff();
   }
 
   const opts = c => (c.options?.length ? c.options : S.data.policy.options);
@@ -633,10 +856,12 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   async function decideCur(value) {
     const id = S.cur, before = rowsNow().map(c => c.id), at = before.indexOf(id);
     await api(`/api/cases/${id}/decide`, { value });
-    if (S.tab === "calls") { const r = S.calls.rows?.find(c => c.id === id); if (r) r.decision = value; }
+    if (S.tab === "calls") { const r = S.calls.rows?.find(c => c.id === id); if (r) r.decision = typeof value === "string" ? value : JSON.stringify([...value].sort()); }
     await load();
-    if (S.tab === "queue") {
-      const q = S.data.queue.map(c => c.id), next = before.slice(at + 1).find(x => q.includes(x)) ?? q[0];
+    if (S.tab === "calls") {
+      // on to the next undecided one below
+      if (S.review) await loadCalls();
+      const left = invocations().filter(c => c.decision == null).map(c => c.id), next = before.slice(at + 1).find(x => left.includes(x)) ?? left[0];
       if (next) { await open(next, false); renderPolicy(); document.querySelector(".row.on")?.scrollIntoView({ block:"nearest" }); return; }
     }
     await open(id, false); renderPolicy();
@@ -675,9 +900,14 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     const tab = t.closest("[data-tab]");
     if (tab) { S.tab = tab.dataset.tab; if (S.tab === "calls" && !S.calls.rows) { renderList(); await loadCalls(); } renderList(); return; }
     if (t.closest("#more")) { await loadCalls(true); renderList(); return; }
+    if (t.closest("#review")) {
+      S.review = !S.review; S.calls.rows = null; renderList(); await loadCalls(); renderList();
+      const f = invocations()[0]; if (S.review && f && !invocations().some(c => c.id === S.cur)) await open(f.id);
+      return;
+    }
     const ok = t.closest("[data-ok]");
     if (ok) {
-      const c = S.data.queue.find(x => x.id === +ok.dataset.ok);
+      const c = (S.calls.rows || []).find(x => x.id === +ok.dataset.ok) ?? S.data.queue.find(x => x.id === +ok.dataset.ok);
       if (!c) return refresh();
       if (S.cur !== c.id) await open(c.id, false);
       return decideCur(S.data.policy.kind === "multi" ? set(c.answer) : c.answer);
@@ -687,21 +917,15 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     const tg = t.closest("[data-toggle]");
     if (tg && !tg.disabled) return toggle(tg.dataset.toggle);
     if (t.closest("#saveMulti")) return decideCur([...S.multi]);
-    const cs = t.closest("[data-case]"); if (cs) { if ($("dlg").open) $("dlg").close(); await open(+cs.dataset.case); return; }
+    const cs = t.closest("[data-case]"); if (cs) { await open(+cs.dataset.case); return; }
     if (t.closest("#pickAll")) { S.pickAll = true; renderList(); return; }
-    const v = t.closest("[data-v]"); if (v) { S.sel = v.dataset.v === "S" ? "S" : +v.dataset.v; S.editing = null; S.trying = false; renderPane(); await loadText(); renderPane(); return; }
-    if (t.closest("[data-x]")) { $("dlg").close(); return; }
-    const gp = t.closest("[data-gap]"); if (gp) { S.gaps.add(gp.dataset.gap); renderDiff(); return; }
-    const lk = t.closest("[data-lock]");
-    if (lk) return act("lock", () => post("lock", { part: lk.dataset.lock, key: lk.dataset.key, locked: !!lk.dataset.on }));
-    if (t.closest("#diffBtn")) return openDiff();
     if (t.closest("#copy")) {
       const m = Object.entries(S.text?.merged || {});
       try { await navigator.clipboard.writeText(m.length === 1 ? m[0][1] : m.map(([k, x]) => `## ${k}\n\n${x}`).join("\n\n")); S.copied = true; } catch { S.error = "The browser didn't allow copying here"; }
       renderPane(); setTimeout(() => { S.copied = false; if (!S.editing) renderPane(); }, 1500); return;
     }
     if (t.closest("#suggest")) return act("suggest", async () => {
-      await post("suggest", S.pickAll ? { all: true } : { cases: [...S.pick] }); S.pick.clear(); S.pickAll = false; S.sel = "S"; S.trying = false;
+      await post("suggest", S.pickAll ? { all: true } : { cases: [...S.pick] }); S.pick.clear(); S.pickAll = false; S.sel = "S";
     });
     if (t.closest("#edit")) return startEdit();
     if (t.closest("#editCancel")) { S.editing = null; renderPane(); return; }
@@ -710,26 +934,14 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       S.editing = null;
       return act("edit", async () => { const s = await post("edit", { parts, sample: S.editSample }); if (s) S.sel = "S"; });
     }
-    if (t.closest("#replayBtn")) return act("replay", () => post("replay", { target: S.sel === "S" ? "draft" : S.sel }));
-    if (t.closest("#tuneBtn")) return act("tune", () => post("tune"));
-    if (t.closest("#accept")) return act("accept", async () => { const r = await post("stage", { mode: "live", target: "draft" }); S.sel = r.n; });
-    if (t.closest("#tryBtn")) { S.trying = !S.trying; renderPane(); return; }
-    if (t.closest("#tryStart")) {
-      const mode = $("mode").value, pct = Math.max(0.1, Math.min(100, Number($("pct").value) || 10));
-      return act("stage", async () => { const r = await post("stage", { mode, pct, target: "draft" }); S.sel = r.n; S.trying = false; });
-    }
-    const stg = t.closest("[data-stage]");
-    if (stg) return act("stage", async () => { const r = await post("stage", { mode: stg.dataset.stage, target: +stg.dataset.target }); S.sel = r.n; });
-    if (t.closest("#stop")) return act("stop", () => post("stop"));
     if (t.closest("#rebase")) return act("rebase", async () => { const r = await post("rebase"); S.sel = r.live; });
     if (t.closest("#discard")) return act("discard", async () => { await post("discard"); S.sel = null; });
-    if (t.closest("#rollback")) return act("live", async () => { await post("live", { version: S.sel }); });
     if (t.closest("#inherit")) return act("live", async () => { await post("live", { version: null }); S.sel = null; });
   });
 
   // j/k move · 1–9 decide · Enter agrees with the model · x picks · / filters calls
   document.addEventListener("keydown", e => {
-    if (S.view !== "policy" || !S.data || e.metaKey || e.ctrlKey || e.altKey || $("dlg").open) return;
+    if (S.view !== "policy" || !S.data || e.metaKey || e.ctrlKey || e.altKey) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { if (e.key === "Escape") e.target.blur(); return; }
     const list = rowsNow(), i = list.findIndex(c => c.id === S.cur);
     const c = S.caseView, free = c && c.policy === S.data.policy.name && c.used_in == null;

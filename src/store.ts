@@ -13,9 +13,15 @@ export interface Draft {
   replay: ReplayResult[] | null;
   tune: LogEntry[];
   created_at: string;
+  /** How it came about: written from decided cases, auto-tuned, edited by hand. */
+  origin?: Origin;
 }
-/** A version being tried on live traffic before it goes live: shadow (re-run on the side) or canary (served). */
-export interface Candidate { n: number; mode: "shadow" | "canary"; pct: number; since: string }
+export type Origin = "generated" | "tuned" | "hand" | "rebased";
+/**
+ * A version tried on live traffic next to the live one: shadow (re-run on the side on pct% of calls, its
+ * answer only compared) or canary (served to pct% of conversations). A scope can try several at once.
+ */
+export interface Candidate { n: number; mode: "shadow" | "canary"; pct: number; since: string; /** canary: where its slice of conversation buckets starts */ at?: number }
 export interface LogEntry { round: number; pass: number | null; n: number | null; note: string }
 export interface ReplayResult { id: number; human: string; model: string | null; pass: boolean; error?: string }
 
@@ -25,12 +31,12 @@ export interface PolicyRow {
 }
 /**
  * A scope's pointer into the policy's versions (live = null: the scope runs its parent's version),
- * its draft, the candidate being tried, and the clauses people locked (per part, normalized clause text).
+ * its draft, the versions being tried, and the clauses people locked (per part, normalized clause text).
  */
-export interface VariantRow { policy: string; scope: string; live: number | null; draft: Draft | null; candidate: Candidate | null; locks: Record<string, string[]> }
+export interface VariantRow { policy: string; scope: string; live: number | null; draft: Draft | null; candidates: Candidate[]; locks: Record<string, string[]> }
 export interface VersionRow {
   policy: string; n: number; scope: string; base: number | null; ops: Doc; keys: Record<string, string[]>; because: Record<string, number[]>;
-  cases: number[]; replay: ReplayResult[] | null; log: { notes?: string; tune: LogEntry[]; rebased?: number } | null; created_at: string;
+  cases: number[]; replay: ReplayResult[] | null; log: { notes?: string; tune: LogEntry[]; rebased?: number; origin?: Origin } | null; created_at: string;
   /** Written by decidus 0.3 as option descriptions; it no longer changes calls. */
   legacy?: boolean;
 }
@@ -49,7 +55,11 @@ export interface CaseRow {
   url: string; headers: Record<string, string>; request: any; response: any;
 }
 export type NewCase = Omit<CaseRow, "id" | "decision" | "decided_at" | "used_in" | "created_at" | "shadow_version" | "shadow_answer">;
-export interface CallFilter { answer?: string; version?: number; decided?: "yes" | "no"; queued?: boolean; maxConf?: number; minConf?: number; text?: string }
+export interface CallFilter {
+  answer?: string; version?: number; decided?: "yes" | "no"; queued?: boolean; maxConf?: number; minConf?: number; text?: string;
+  /** Calls where a shadow answered differently from the live version (of that version, if a number). */
+  differs?: number | true;
+}
 
 const now = () => new Date().toISOString();
 const j = (s: unknown) => (s == null ? null : JSON.parse(String(s)));
@@ -60,11 +70,10 @@ function inScope(s: string): [string, string[]] {
   // one index range [s, s + "0"), "0" sorting right after "/", then drop look-alikes such as "acme-eu" for "acme"
   return s ? [" and scope >= ? and scope < ? and (scope = ? or substr(scope, 1, ?) = ?)", [s, s + "0", s, String(s.length + 1), s + "/"]] : ["", []];
 }
-/** The queue window is drawn from this many of the newest waiting calls. */
+/** The review list is drawn from this many of the newest waiting calls. */
 const POOL = 5000;
 /** Newest rows read before falling back to the scope index (see `newest`). */
 const SCAN = 20000;
-const band = (c: number | null) => c == null ? -1 : c < 0.5 ? 0 : c < 0.65 ? 1 : c < 0.8 ? 2 : 3;
 
 const SCHEMA = `
   create table if not exists policies (
@@ -151,31 +160,34 @@ export class Store {
     }
   }
 
-  // ---------- variants: per-scope live pointer, draft, candidate, locks ----------
+  // ---------- variants: per-scope live pointer, draft, candidates, locks ----------
   private variantRow(r: any): VariantRow {
-    const draft = j(r.suggestion);
-    return { policy: r.policy, scope: r.scope, live: r.live, draft: draft?.ops ? draft : null, candidate: j(r.candidate), locks: j(r.locks) ?? {} };
+    const draft = j(r.suggestion), c = j(r.candidate);                       // 0.4 kept one candidate, as an object
+    return { policy: r.policy, scope: r.scope, live: r.live, draft: draft?.ops ? draft : null, candidates: Array.isArray(c) ? c : c ? [c] : [], locks: j(r.locks) ?? {} };
   }
   variant(policy: string, scope: string): VariantRow {
     const r = this.db.prepare("select * from variants where policy = ? and scope = ?").get(policy, scope);
-    return r ? this.variantRow(r) : { policy, scope, live: null, draft: null, candidate: null, locks: {} };
+    return r ? this.variantRow(r) : { policy, scope, live: null, draft: null, candidates: [], locks: {} };
   }
   variants(policy: string): VariantRow[] {
     return this.db.prepare("select * from variants where policy = ? order by scope").all(policy).map(r => this.variantRow(r));
   }
   private putVariant(v: VariantRow) {
     this.liveCache = null;
-    if (v.scope && v.live == null && !v.draft && !v.candidate && !Object.keys(v.locks).length) {
+    if (v.scope && v.live == null && !v.draft && !v.candidates.length && !Object.keys(v.locks).length) {
       this.db.prepare("delete from variants where policy = ? and scope = ?").run(v.policy, v.scope);
       return;
     }
     const js = (x: unknown) => (x ? JSON.stringify(x) : null);
     this.db.prepare(`insert into variants (policy, scope, live, suggestion, candidate, locks) values (?, ?, ?, ?, ?, ?)
       on conflict (policy, scope) do update set live = excluded.live, suggestion = excluded.suggestion, candidate = excluded.candidate, locks = excluded.locks`)
-      .run(v.policy, v.scope, v.live, js(v.draft), js(v.candidate), Object.keys(v.locks).length ? JSON.stringify(v.locks) : null);
+      .run(v.policy, v.scope, v.live, js(v.draft), v.candidates.length ? JSON.stringify(v.candidates) : null, Object.keys(v.locks).length ? JSON.stringify(v.locks) : null);
   }
   setDraft(policy: string, scope: string, d: Draft | null) { this.putVariant({ ...this.variant(policy, scope), draft: d }); }
-  setCandidate(policy: string, scope: string, c: Candidate | null) { this.putVariant({ ...this.variant(policy, scope), candidate: c }); }
+  /** Kept in version order, so a conversation's canary bucket maps to the same version on every client. */
+  setCandidates(policy: string, scope: string, list: Candidate[]) {
+    this.putVariant({ ...this.variant(policy, scope), candidates: [...list].sort((a, b) => a.n - b.n || a.mode.localeCompare(b.mode)) });
+  }
   setLocks(policy: string, scope: string, locks: Record<string, string[]>) { this.putVariant({ ...this.variant(policy, scope), locks }); }
   /** n = null: the scope goes back to running its parent's version. */
   setLive(policy: string, scope: string, n: number | null) { this.putVariant({ ...this.variant(policy, scope), live: scope ? n : (n ?? 0) }); }
@@ -188,16 +200,17 @@ export class Store {
     return { n: 0, from: "" };
   }
   /**
-   * The candidate being tried on calls in `scope`, and the scope it was set for: the nearest one up the
-   * scope path, unless a narrower scope on the way runs its own version.
+   * The versions being tried on calls in `scope`, and the scope they were set for: the nearest scope up the
+   * path that tries any, unless a narrower scope on the way runs its own version.
    */
-  candidateFor(policy: string, scope: string): (Candidate & { scope: string }) | null {
+  candidatesFor(policy: string, scope: string): (Candidate & { scope: string })[] {
+    const live = this.effective(policy, scope).n;
     for (const p of prefixes(scope)) {
       const v = this.variant(policy, p);
-      if (v.candidate) return { ...v.candidate, scope: p };
-      if (v.live != null) return null;
+      if (v.candidates.length) return v.candidates.filter(c => c.n !== live).map(c => ({ ...c, scope: p }));
+      if (v.live != null) return [];
     }
-    return null;
+    return [];
   }
   /** Union of the clauses locked in `scope` and the scopes above it. */
   locks(policy: string, scope: string): Record<string, string[]> {
@@ -210,12 +223,16 @@ export class Store {
     if (this.liveCache) return this.liveCache;
     const out: LiveSet = { policies: {}, scopes: {} };
     for (const v of this.db.prepare("select * from variants").all().map(r => this.variantRow(r))) {
-      const canary = v.candidate?.mode === "canary" ? v.candidate : null;
-      if (v.live == null && !canary) continue;
+      // a scope with trials of its own answers with those, not its parent's (as candidatesFor reports)
+      if (v.live == null && !v.candidates.length) continue;
       const n = v.live ?? this.effective(v.policy, v.scope).n;
+      const canaries = v.candidates.filter(c => c.mode === "canary" && c.pct > 0 && c.n !== n);
       const lp: LivePolicy = { version: n, ops: this.version(v.policy, n)?.ops ?? {} };
-      if (canary) lp.canary = { version: canary.n, ops: this.version(v.policy, canary.n)?.ops ?? {}, pct: canary.pct };
-      if (!v.scope) { if (n > 0 || canary) out.policies[v.policy] = lp; }
+      if (canaries.length) {
+        lp.canaries = canaries.map(c => ({ version: c.n, ops: this.version(v.policy, c.n)?.ops ?? {}, pct: c.pct, ...(c.at != null ? { at: c.at } : {}) }));
+        lp.canary = lp.canaries[0];                           // clients before 0.5 serve one
+      }
+      if (!v.scope) { if (n > 0 || canaries.length || v.candidates.length) out.policies[v.policy] = lp; }
       else (out.scopes![v.scope] ??= {})[v.policy] = lp;     // v0 too: a scope pinned to the code as written
     }
     return (this.liveCache = out);
@@ -298,18 +315,23 @@ export class Store {
   }
 
   /**
-   * The queue: a window over everything waiting for review, picked round-robin across
-   * scope x version x answer x confidence band, newest first in each, newer versions first.
-   * A million waiting calls still show as a representative 50.
+   * To review: calls waiting for a decision, the ones the model was least sure of first. Calls a shadow
+   * answered differently come first; then the model's own doubt (a yes/no probability closest to a coin
+   * flip, else the lowest confidence in the answer it gave); for calls without one, how often people correct
+   * that answer; then the newest.
    */
-  queue(policy: string, scope: string, limit: number) {
-    const pool = this.newest("policy = ? and escalated = 1 and decision is null", [policy], scope, POOL, "cases_wait");
-    const seen = new Map<string, number>();
-    return pool.map(c => {                                   // pool is newest first, so rank 1 is the newest of its kind
-      const k = `${c.scope}|${c.version}|${c.answer}|${band(c.confidence)}`, rank = (seen.get(k) ?? 0) + 1;
-      seen.set(k, rank);
-      return { c, rank };
-    }).sort((x, y) => x.rank - y.rank || y.c.version - x.c.version || y.c.id - x.c.id).slice(0, limit).map(x => x.c);
+  review(policy: string, scope: string, limit: number, f?: CallFilter) {
+    const pool = f && Object.keys(f).length ? this.calls(policy, scope, { ...f, queued: true }, null, POOL)
+      : this.newest("policy = ? and escalated = 1 and decision is null", [policy], scope, POOL, "cases_wait");
+    const [w, a] = inScope(scope);
+    const rate = new Map<string | null, number>();
+    for (const r of this.db.prepare(`select answer, count(*) as n, sum(decision is not answer) as wrong from cases
+        where policy = ? and decision is not null${w} group by answer`).all(policy, ...a) as any[]) rate.set(r.answer, ((r.wrong ?? 0) + 1) / (r.n + 2));
+    const yesNo = this.policy(policy)?.kind === "bool";
+    const doubt = (c: any) => c.confidence == null ? rate.get(c.answer) ?? 0.5 : yesNo ? 1 - Math.abs(2 * c.confidence - 1) : 1 - c.confidence;
+    const differs = (c: any) => (c.shadow_version != null && c.shadow_answer !== c.answer ? 1 : 0);
+    return pool.map(c => ({ c, d: differs(c), u: doubt(c) }))
+      .sort((x, y) => y.d - x.d || y.u - x.u || y.c.id - x.c.id).slice(0, limit).map(x => x.c);
   }
   /**
    * Newest matching rows in a scope. Reading the policy's newest SCAN rows finds them fast when the scope
@@ -353,6 +375,8 @@ export class Store {
     if (f.decided === "yes") where.push("decision is not null");
     if (f.decided === "no") where.push("decision is null");
     if (f.queued) where.push("escalated = 1 and decision is null");
+    if (f.differs === true) where.push("shadow_version is not null and shadow_answer is not answer");
+    else if (f.differs != null) { where.push("shadow_version = ? and shadow_answer is not answer"); args.push(f.differs); }
     if (f.maxConf != null) { where.push("confidence < ?"); args.push(f.maxConf); }
     if (f.minConf != null) { where.push("confidence >= ?"); args.push(f.minConf); }
     if (f.text && !/\s/.test(f.text)) {                      // one of your ids, through their indexes

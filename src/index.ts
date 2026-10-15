@@ -17,7 +17,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { apply, normScope, resolve, routeOf, specs, type Kind, type LivePolicy, type LiveSet, type Rename, type Route } from "./shapes.js";
 
-export type { LivePolicy, LiveSet, Doc, Op, Spec, Route, Kind, Answer } from "./shapes.js";
+export type { Canary, LivePolicy, LiveSet, Doc, Op, Spec, Route, Kind, Answer } from "./shapes.js";
 
 /** A decision decidus found in a request, as the `name` option sees it. */
 export interface Decision {
@@ -82,10 +82,22 @@ function bucket(s: string): number {
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
   return ((h >>> 0) % 10000) / 100;
 }
-/** The version a call runs: the candidate for its share of calls (per conversation when there is one), else live. */
+/**
+ * The version a call runs: a canary for its share of calls (the same one for a whole conversation when
+ * there is one), else live. Each canary owns a slice of the 0-100 range starting at `at`, so changing one
+ * canary moves no conversation on another (servers before 0.5 send consecutive slices).
+ */
 function serve(name: string, p: LivePolicy, conversation: string | null) {
-  const c = p.canary;
-  if (c && c.pct > 0 && (conversation ? bucket(`${name}|${conversation}`) : Math.random() * 100) < c.pct) return { version: c.version, ops: c.ops };
+  const list = p.canaries ?? (p.canary ? [p.canary] : []);
+  if (list.length) {
+    const b = conversation ? bucket(`${name}|${conversation}`) : Math.random() * 100;
+    let next = 0;
+    for (const c of list) {
+      const start = c.at ?? next;
+      next = start + c.pct;
+      if (c.pct > 0 && b >= start && b < next) return { version: c.version, ops: c.ops };
+    }
+  }
   return { version: p.version, ops: p.ops };
 }
 
