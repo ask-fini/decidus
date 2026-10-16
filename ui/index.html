@@ -317,6 +317,8 @@ tr.on .radio{box-shadow:inset 0 0 0 1.5px var(--accent),inset 0 0 0 4.5px var(--
     const key = keep.get("decidus_key");
     const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "content-type":"application/json", ...(key ? { authorization:`Bearer ${key}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
     if (r.status === 401) { gate(); throw new Error("unauthorised"); }
+    if (!(r.headers.get("content-type") || "").includes("json"))
+      throw new Error(`${path.split("?")[0]} answered HTTP ${r.status} without JSON: open this page from decidus serve (http://localhost:7700), not as a file or from another server`);
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     return j;
@@ -387,7 +389,11 @@ tr.on .radio{box-shadow:inset 0 0 0 1.5px var(--accent),inset 0 0 0 4.5px var(--
       if (S.tab === "calls" && !S.calls.rows) await loadCalls();
       if (!S.cur) { const first = S.tab === "calls" ? invocations()[0] : S.data.unprocessed[0]; if (first) await open(first.id, false); }
       renderPolicy(poll);
-    } catch (e) { if (e.message !== "unauthorised") console.error(e); }
+    } catch (e) {
+      if (e.message === "unauthorised") return;
+      console.error(e);
+      if (!S.overview && !S.data) { $("ov").hidden = false; $("ov").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }   // nothing loaded yet: say why on the page
+    }
   }
   setInterval(() => { if (!S.busy && !S.editing && document.visibilityState === "visible" && !/^(INPUT|SELECT)$/.test(document.activeElement?.tagName)) refresh(true); }, 4000);
 
@@ -466,7 +472,8 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
       h += `<div class="filter"><input id="cq" value="${esc(S.calls.q)}" placeholder="Filter · answer:refund  v:2  conv_…" aria-label="Filter invocations" autocomplete="off" spellcheck="false">
         <button class="rvw" id="review" aria-pressed="${S.review}" title="Only what you haven't decided, the cases the model is least sure of first">To review <span class="ct">${fmt(t.queue)}</span></button></div>`;
       const rows = S.calls.rows == null ? null : invocations();
-      if (S.review && rows) h += `<div class="win"><span>${rows.length} undecided</span><span class="fill"></span><span title="Calls a shadow answered differently first, then the model's own doubt, then answers people often correct">least certain first</span></div>`;
+      const left = rows?.filter(c => c.decision == null).length;
+      if (S.review && rows) h += `<div class="win"><span>${left ? `${left} undecided` : "All reviewed"}</span><span class="fill"></span><span title="Calls a shadow answered differently first, then the model's own doubt, then answers people often correct">least certain first</span></div>`;
       h += `<div class="rows">` + (rows == null ? '<div class="empty">Loading…</div>' : rows.length ? rows.map(c => invRow(c, on(c.id))).join("")
         + (S.calls.next && !S.review ? '<button class="more" id="more">Older invocations</button>' : "") : `<div class="empty">${S.review ? "Nothing left to review" : "No invocations match"}</div>`);
       $("list").innerHTML = h + "</div>"; return;
@@ -489,7 +496,8 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   }
 
   // To review: the server lists undecided calls, the ones the model was least sure of first
-  const invocations = () => (S.calls.rows || []).filter(c => !S.review || c.decision == null);
+  // what you decide in To review stays in place, ticked, until the list reloads, so nothing shifts under you
+  const invocations = () => (S.calls.rows || []).filter(c => !S.review || c.decision == null || S.calls.kept?.has(c.id));
   function invRow(c, on) {
     return `<div class="row${on}"><button class="rb" data-case="${c.id}"><div class="r-t">${esc(c.headline || "(no text)")}</div>
       <div class="r-m">#${c.id} · ${c.decision != null ? `<span class="cat">✓ ${esc(lab(c.decision))}</span>` : `<span class="${sure(c) ? "ok" : "ans"}">${esc(said(c))}</span>`} · v${esc(c.version)}${shadowTag(c)}${scopeTag(c)} · ${c.status >= 400 ? `<span class="badc">HTTP ${esc(c.status)}</span>` : ago(c.created_at)}</div></button>
@@ -501,6 +509,7 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
     if (more && S.calls.next) qs.set("before", S.calls.next);
     const r = await api(scoped(P("/calls?" + qs)));
     S.calls.rows = more ? [...(S.calls.rows || []), ...r.calls] : r.calls;
+    if (!more) S.calls.kept = new Set();
     S.calls.next = r.next;
   }
 
@@ -854,17 +863,15 @@ const claude = new Anthropic({ fetch: decidus.fetch() });</pre></div></div>`;
   const toggle = o => { S.multi.has(o) ? S.multi.delete(o) : S.multi.add(o); if ($("seg")) $("seg").innerHTML = segHtml(S.caseView); };
 
   async function decideCur(value) {
-    const id = S.cur, before = rowsNow().map(c => c.id), at = before.indexOf(id);
-    await api(`/api/cases/${id}/decide`, { value });
-    if (S.tab === "calls") { const r = S.calls.rows?.find(c => c.id === id); if (r) r.decision = typeof value === "string" ? value : JSON.stringify([...value].sort()); }
+    const id = S.cur, v = typeof value === "string" ? value : JSON.stringify([...value].sort());
+    // you stay on the case: the button you press keeps its colour and the row gets its tick; j/k or a click moves on
+    if (S.caseView?.id === id) { S.caseView.decision = v; renderDetail(); }
+    try { await api(`/api/cases/${id}/decide`, { value }); }
+    catch (e) { await open(id, false); renderPolicy(); throw e; }
+    if (S.tab === "calls") { const r = S.calls.rows?.find(c => c.id === id); if (r) { r.decision = v; S.calls.kept?.add(id); } }
     await load();
-    if (S.tab === "calls") {
-      // on to the next undecided one below
-      if (S.review) await loadCalls();
-      const left = invocations().filter(c => c.decision == null).map(c => c.id), next = before.slice(at + 1).find(x => left.includes(x)) ?? left[0];
-      if (next) { await open(next, false); renderPolicy(); document.querySelector(".row.on")?.scrollIntoView({ block:"nearest" }); return; }
-    }
-    await open(id, false); renderPolicy();
+    if (S.cur === id) await open(id, false);
+    renderPolicy();
   }
 
   async function startEdit() {
